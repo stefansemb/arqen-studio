@@ -1,0 +1,188 @@
+"use client";
+
+import { useRef } from "react";
+import type { SceneEdit } from "@yta/core/sceneEdits";
+import { fitClip, MAX_CLIP_RATE } from "@yta/core/timing";
+
+export interface EditorScene {
+  start: number;
+  end: number;
+  type: string;
+  text: string;
+  asset?: string;
+  clip?: string;
+  clipStart?: number;
+  clipEnd?: number;
+  zoom?: boolean;
+}
+
+export interface EditorClip {
+  id: string;
+  original: string;
+  durationSec: number;
+}
+
+/** The edit that represents a scene as it is saved now, used as the starting point for a draft. */
+export function editFromScene(scene: EditorScene, index: number): SceneEdit {
+  return scene.type === "clip" && scene.clip
+    ? { index, type: "clip", clip: scene.clip, clipStart: scene.clipStart ?? 0, clipEnd: scene.clipEnd, text: scene.text, zoom: scene.zoom !== false }
+    : scene.type === "broll" && scene.asset
+      ? { index, type: "broll", text: "" }
+      : { index, type: "title", text: scene.text };
+}
+
+const round = (n: number) => Math.round(n * 10) / 10;
+
+export function SceneEditor(props: {
+  projectId: string;
+  index: number;
+  scene: EditorScene;
+  clips: EditorClip[];
+  draft: SceneEdit | undefined;
+  onChange: (edit: SceneEdit | undefined) => void;
+}) {
+  const { scene, clips, index } = props;
+  const video = useRef<HTMLVideoElement>(null);
+  const edit = props.draft ?? editFromScene(scene, index);
+  const clip = edit.type === "clip" ? clips.find((c) => c.id === edit.clip) : undefined;
+  const sceneSec = scene.end - scene.start;
+  const update = (patch: Partial<SceneEdit>) => props.onChange({ ...edit, ...patch });
+
+  function choose(value: string) {
+    if (value.startsWith("clip:")) {
+      const c = clips.find((x) => x.id === value.slice(5))!;
+      const keepRange = edit.type === "clip" && edit.clip === c.id;
+      update({
+        type: "clip",
+        clip: c.id,
+        clipStart: keepRange ? edit.clipStart : 0,
+        clipEnd: keepRange ? edit.clipEnd : round(Math.min(c.durationSec, sceneSec)),
+        text: edit.type === "broll" ? "" : edit.text,
+      });
+    } else {
+      update({ type: value as "title" | "broll", clip: undefined, clipStart: undefined, clipEnd: undefined });
+    }
+  }
+
+  let fitNote = "";
+  if (clip) {
+    const f = fitClip(edit.clipStart ?? 0, edit.clipEnd ?? clip.durationSec, sceneSec);
+    const shown = (edit.clipEnd ?? clip.durationSec) - (edit.clipStart ?? 0);
+    fitNote =
+      sceneSec - f.playSec >= 0.1
+        ? `Plays at 1x, then freezes for the last ${(sceneSec - f.playSec).toFixed(1)} s`
+        : f.playbackRate < 1.02
+          ? "Plays at 1x, fits the scene"
+        : f.playbackRate >= MAX_CLIP_RATE && shown / sceneSec > MAX_CLIP_RATE
+          ? `Too long: plays at ${MAX_CLIP_RATE}x and cuts the last ${(shown - sceneSec * MAX_CLIP_RATE).toFixed(1)} s`
+          : `Plays at ${f.playbackRate.toFixed(2)}x to fit`;
+  }
+
+  return (
+    <div className="editor">
+      <div className="row" style={{ justifyContent: "space-between" }}>
+        <strong>
+          Scene {index + 1} · {scene.start.toFixed(1)}-{scene.end.toFixed(1)} s ({sceneSec.toFixed(1)} s)
+        </strong>
+        {props.draft ? (
+          <button type="button" className="btn ghost" onClick={() => props.onChange(undefined)}>
+            Undo changes
+          </button>
+        ) : null}
+      </div>
+
+      <div className="row">
+        <span className="label">Visual</span>
+        <select
+          className="input"
+          style={{ flex: "none", minWidth: 280 }}
+          value={edit.type === "clip" ? `clip:${edit.clip}` : edit.type}
+          onChange={(e) => choose(e.target.value)}
+        >
+          {clips.map((c) => (
+            <option key={c.id} value={`clip:${c.id}`}>
+              {c.id} · {c.original} ({c.durationSec.toFixed(1)} s)
+            </option>
+          ))}
+          <option value="title">Title card</option>
+          {scene.asset ? <option value="broll">B-roll image</option> : null}
+        </select>
+      </div>
+
+      {clip ? (
+        <>
+          <video
+            ref={video}
+            key={clip.id}
+            src={`/api/files/${props.projectId}/clips/${clip.id}.mp4#t=${edit.clipStart ?? 0}`}
+            controls
+            muted
+            className="clip-preview"
+          />
+          <div className="row">
+            <span className="label">Range</span>
+            <input
+              className="input num"
+              type="number"
+              step={0.1}
+              min={0}
+              max={clip.durationSec}
+              value={edit.clipStart ?? 0}
+              onChange={(e) => update({ clipStart: Number(e.target.value) })}
+            />
+            <span className="muted">to</span>
+            <input
+              className="input num"
+              type="number"
+              step={0.1}
+              min={0}
+              max={clip.durationSec}
+              value={edit.clipEnd ?? clip.durationSec}
+              onChange={(e) => update({ clipEnd: Number(e.target.value) })}
+            />
+            <span className="muted">s</span>
+            <button type="button" className="btn ghost" onClick={() => video.current && update({ clipStart: round(video.current.currentTime) })}>
+              Set start here
+            </button>
+            <button type="button" className="btn ghost" onClick={() => video.current && update({ clipEnd: round(video.current.currentTime) })}>
+              Set end here
+            </button>
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => {
+                if (!video.current) return;
+                video.current.currentTime = edit.clipStart ?? 0;
+                void video.current.play();
+              }}
+            >
+              {"▶"} From start
+            </button>
+          </div>
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <span className="muted" style={{ fontSize: 12 }}>
+              {fitNote}
+            </span>
+            <label className="row" style={{ gap: 6, cursor: "pointer" }}>
+              <input type="checkbox" checked={edit.zoom !== false} onChange={(e) => update({ zoom: e.target.checked })} />
+              Auto zoom
+            </label>
+          </div>
+        </>
+      ) : null}
+
+      {edit.type !== "broll" ? (
+        <div className="row">
+          <span className="label">{edit.type === "clip" ? "Label" : "Text"}</span>
+          <input
+            className="input"
+            placeholder={edit.type === "clip" ? "Optional step label, e.g. Step 2: Pick a length" : "Title text"}
+            value={edit.text ?? ""}
+            maxLength={120}
+            onChange={(e) => update({ text: e.target.value })}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}

@@ -1,0 +1,46 @@
+{
+  "name": "@yta/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./db": "./src/db.ts",
+    "./steps": "./src/steps/names.ts",
+    "./props": "./src/props.ts",
+    "./paths": "./src/paths.ts",
+    "./fromScript": "./src/fromScript.ts",
+    "./sceneEdits": "./src/sceneEdits.ts",
+    "./timing": "./src/timing.ts",
+    "./settings": "./src/settings.ts",
+    "./zoom": "./src/zoom.ts",
+    "./tts": "./src/providers/tts.ts",
+    "./publish": "./src/publish.ts",
+    "./publishStore": "./src/publishStore.ts",
+    "./youtube": "./src/youtube.ts",
+    "./comment": "./src/comment.ts",
+    "./demo": "./src/demo/project.ts",
+    "./demoDraft": "./src/demo/draft.ts",
+    "./demoSpec": "./src/demo/spec.ts",
+    "./uploadRequest": "./src/uploadRequest.ts",
+    "./autopilot": "./src/autopilot.ts",
+    "./news": "./src/news.ts",
+    "./shorts": "./src/shorts.ts",
+    "./watcher": "./src/watcher.ts",
+    "./telegram": "./src/telegram.ts",
+    "./ffmpeg": "./src/providers/ffmpeg.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
+    "@mozilla/readability": "^0.6.0",
+    "@remotion/bundler": "^4.0.529",
+    "@remotion/renderer": "^4.0.529",
+    "@yta/video": "*",
+    "jsdom": "^30.1.1",
+    "playwright-core": "^1.63.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/jsdom": "*"
+  }
+}

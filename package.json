@@ -1,0 +1,23 @@
+{
+  "name": "arqen-ai-studio",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "node node_modules/concurrently/dist/bin/index.js -k -n web,worker -c magenta,cyan \"npm run dev -w @yta/web\" \"npm run dev -w @yta/worker\"",
+    "pipeline": "node --env-file-if-exists=.env node_modules/tsx/dist/cli.mjs packages/core/src/cli.ts",
+    "test": "node node_modules/vitest/vitest.mjs run",
+    "typecheck": "node node_modules/typescript/bin/tsc -p packages/core --noEmit && node node_modules/typescript/bin/tsc -p packages/video --noEmit && node node_modules/typescript/bin/tsc -p apps/worker --noEmit && node node_modules/typescript/bin/tsc -p apps/web --noEmit",
+    "channel-art": "node --env-file-if-exists=.env node_modules/tsx/dist/cli.mjs packages/core/src/channelAssets.ts"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5",
+    "tsx": "^4.23.15",
+    "typescript": "~5.9.0",
+    "vitest": "^5.0.2",
+    "@types/node": "^24.0.0"
+  }
+}

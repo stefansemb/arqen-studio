@@ -1,0 +1,113 @@
+import fs from "node:fs";
+import { NARRATION_LEAD_IN_SEC } from "../props";
+import path from "node:path";
+import { z } from "zod";
+import { generateStructured } from "../llm";
+import { readJson, writeJson, type StepContext } from "../context";
+import { CHANNEL_NAME } from "../paths";
+import { buildChapters, composeDescription, fitTags, YT, type PublishInfo } from "../publish";
+import { getTemplate } from "../templates";
+import { readAppSettings } from "../settings";
+import type { Article, PlannedScene, Script, Timings } from "../types";
+import { readPublish } from "../publishStore";
+import { listGestures } from "../presenter";
+
+const MetadataSchema = z.object({
+  titles: z.array(z.string()).describe("5 title options, best first"),
+  summary: z.string().describe("Description body: 2 short paragraphs, no chapters, links or hashtags"),
+  chapterTitles: z.array(z.string()).describe("One short chapter title per script segment, in order"),
+  tags: z.array(z.string()).describe("10-20 search tags, most specific first"),
+  hashtags: z.array(z.string()).describe("3 hashtags without the # sign"),
+  thumbnailTexts: z
+    .array(
+      z.object({
+        text: z.string(),
+        highlight: z.string().describe("One word from text to color"),
+        gesture: z.string().describe("Presenter gesture from the list in the instructions, or empty if there is none"),
+      }),
+    )
+    .describe("3 thumbnail text options, 2-5 words each, each starting with the video's subject"),
+  commentQuestion: z
+    .string()
+    .describe("Opening of the channel's pinned comment: 1-2 short sentences ending in a specific question viewers want to answer; no links, no hashtags"),
+});
+
+function readRoundupSources(dir: string): { title: string; url: string }[] {
+  const p = path.join(dir, "articles.json");
+  return fs.existsSync(p) ? (JSON.parse(fs.readFileSync(p, "utf8")) as Article[]).map((a) => ({ title: a.title, url: a.url })) : [];
+}
+
+export async function generateMetadata(ctx: StepContext): Promise<void> {
+  const script = readJson<Script>(ctx, "script.json");
+  const timings = readJson<Timings>(ctx, "timings.json");
+  const article = readJson<Article>(ctx, "article.json");
+  const template = getTemplate(ctx.project.niche);
+  const scenesFile = path.join(ctx.dir, "scenes.json");
+  const scenes = fs.existsSync(scenesFile) ? (JSON.parse(fs.readFileSync(scenesFile, "utf8")) as PlannedScene[]) : [];
+  const gestures = listGestures();
+  ctx.log("Writing title options, description, tags and thumbnail text");
+
+  const m = await generateStructured({
+    schema: MetadataSchema,
+    effort: "medium",
+    system: `You write YouTube packaging for ${CHANNEL_NAME ? `the channel "${CHANNEL_NAME}"` : "a YouTube channel"} (${template.label} videos).
+Titles: under ${YT.titleIdeal} characters, specific and curiosity-driven, front-load the most interesting words. Never promise
+anything the video does not deliver, no ALL CAPS titles, at most one emoji. Vary the angle across options (outcome, question, number, contrarian, how-to).
+Description summary: first sentence works as a search snippet; plain language; no "In this video".
+Pinned comment: a concrete opinion question about this story (e.g. "Would you trust Gemini 4 with your codebase?"), not "What do you think?".
+Thumbnail text: 2-5 punchy words that ADD to the title rather than repeat it; highlight the single most important word.
+Start every thumbnail text with the recognizable subject people search for (product, model, company or person, e.g. "Gemini 4 Locked Away",
+"OpenAI Hits Pause"; for a roundup, the biggest story's subject), so a viewer scrolling past knows the topic at a glance. Only state what the video supports.${
+      gestures.length
+        ? `\nThumbnail gesture: the presenter stands on the right, next to the text. The FIRST option is the one used, and its gesture should be thinking unless another gesture clearly fits better: thinking suits most news, analysis, AI safety and legal twists.
+Use pointing or presenting-left to show off a new product or feature. Use surprised only for truly shocking, once-in-a-while news, never as a default and never on the first option for ordinary news.
+Use a different gesture for each option. Available: ${gestures.join(", ")}.`
+        : ""
+    }`,
+    prompt: `Create the YouTube packaging for this video.
+${article.url ? `Source article: ${article.title} (${article.url})\n` : ""}Working title: ${script.title}
+
+Script segments (write exactly ${script.segments.length} chapter titles, one per segment, max 5 words each):
+${script.segments.map((s, i) => `[${i + 1}]${s.heading ? ` (${s.heading})` : ""} ${s.text}`).join("\n")}
+
+${script.hook ? `Hook: ${script.hook}\n` : ""}${script.cta ? `CTA: ${script.cta}` : ""}`,
+  });
+
+  // Chapter times refer to the final video, so shift by the intro and count the outro.
+  const app = readAppSettings();
+  const intro = (app.intro.enabled ? app.intro.seconds : 0) + NARRATION_LEAD_IN_SEC;
+  const outro = app.outro.enabled ? app.outro.seconds : 0;
+  const shifted = timings.words.map((w) => ({ ...w, start: w.start + intro, end: w.end + intro }));
+  const chapters = buildChapters(script, shifted, m.chapterTitles, intro + timings.durationSec + outro);
+  const hashtags = m.hashtags.slice(0, 3).map((h) => h.replace(/^#/, "").replace(/\s+/g, ""));
+  const titles = m.titles.map((t) => t.trim()).filter(Boolean).slice(0, 5);
+  const previous = readPublish(ctx.dir);
+  const info: PublishInfo = {
+    titles,
+    title: titles[0] ?? script.title,
+    description: composeDescription({
+      summary: m.summary,
+      chapters,
+      sourceUrl: article.url || undefined,
+      sourceName: article.siteName || undefined,
+      sources: ctx.project.source_type === "roundup" ? readRoundupSources(ctx.dir) : undefined,
+      stockCredit: scenes.some((s) => s.credit?.includes("Pexels")),
+      footer: app.descriptionFooter,
+      hashtags,
+    }),
+    tags: fitTags(m.tags),
+    hashtags,
+    chapters,
+    thumbnailTexts: m.thumbnailTexts.slice(0, 3).map((t) => ({
+      text: t.text.trim(),
+      highlight: t.highlight.trim(),
+      ...(gestures.includes(t.gesture.trim()) ? { gesture: t.gesture.trim() } : {}),
+    })),
+    comment: m.commentQuestion.trim(),
+    // Keep existing thumbnails until the thumbnail step replaces them.
+    thumbnails: previous?.thumbnails ?? [],
+    selectedThumbnail: previous?.selectedThumbnail ?? 0,
+  };
+  writeJson(ctx, "publish.json", info);
+  ctx.log(`Title: "${info.title}" (+${titles.length - 1} alternatives), ${chapters.length ? `${chapters.length} chapters` : "no chapters (too short)"}, ${info.tags.length} tags`);
+}

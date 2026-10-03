@@ -1,0 +1,15 @@
+node_modules/
+.env
+data/
+.next/
+out/
+*.log
+*.tsbuildinfo
+thumbnails/
+
+# Personal notes and the separate GitHub Pages repo (privacy policy/terms)
+HANDOVER.md
+docs/youtube-audit/
+
+# Local Claude Code launch config (machine-specific paths)
+.claude/
