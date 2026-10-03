@@ -22,6 +22,17 @@ export async function probeDuration(file: string): Promise<number> {
   return d;
 }
 
+/** Mean loudness in dB of a file, or of [fromSec, toSec) of it (ffmpeg volumedetect). */
+export async function meanVolume(file: string, fromSec?: number, toSec?: number): Promise<number> {
+  const range = [...(fromSec !== undefined ? ["-ss", String(fromSec)] : []), ...(toSec !== undefined ? ["-to", String(toSec)] : [])];
+  const { stderr } = await run("ffmpeg", ["-hide_banner", "-nostats", ...range, "-i", file, "-vn", "-af", "volumedetect", "-f", "null", "-"], {
+    maxBuffer: 16 * 1024 * 1024,
+  });
+  const m = /mean_volume:\s*(-?[\d.]+) dB/.exec(stderr);
+  if (!m) throw new Error(`ffmpeg could not measure the volume of ${file}`);
+  return parseFloat(m[1]);
+}
+
 /** Concatenates audio files into one mp3 (re-encoded, so chunk boundaries are clean). */
 export async function concatAudio(files: string[], out: string): Promise<void> {
   if (files.length === 1) {

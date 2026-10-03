@@ -95,15 +95,16 @@ export function ShortsPanel(props: {
   }
 
   const dirty = Object.keys(drafts).length > 0;
-  const field = (s: Short, k: "title" | "hookText" | "start" | "end") => (drafts[s.id]?.[k] ?? s[k]) as string | number;
-  const setField = (s: Short, k: "title" | "hookText" | "start" | "end", v: string | number) =>
+  type Field = "title" | "hookText" | "spokenHook" | "start" | "end";
+  const field = (s: Short, k: Field) => (drafts[s.id]?.[k] ?? s[k] ?? "") as string | number;
+  const setField = (s: Short, k: Field, v: string | number) =>
     setDrafts((d) => ({ ...d, [s.id]: { ...d[s.id], [k]: v } }));
 
   return (
     <div className="stack">
       <div className="row" style={{ justifyContent: "space-between" }}>
         <span className="muted" style={{ fontSize: 13 }}>
-          Vertical 9:16 clips cut from this video. They reuse the existing voiceover, so they cost no ElevenLabs credits.
+          Vertical 9:16 clips cut from this video. They reuse the existing voiceover; only the spoken hook is new (about 1 ElevenLabs credit per character, once).
         </span>
         <div className="row">
           <button className="btn ghost" disabled={finding || props.busy} onClick={find}>
@@ -129,7 +130,10 @@ export function ShortsPanel(props: {
         {shorts?.map((s) => {
           const u = upload[s.id] ?? { privacy: "schedule", when: localDefault(), notify: true, confirm: false, sending: false };
           const setU = (patch: Partial<typeof u>) => setUpload((m) => ({ ...m, [s.id]: { ...u, ...patch } }));
-          const stale = s.file && (drafts[s.id] || s.renderKey !== `${s.start.toFixed(2)}-${s.end.toFixed(2)}|${s.hookText}`);
+          // Same as shortRenderKey in packages/core/src/steps/shorts.ts.
+          const renderKey = `${s.start.toFixed(2)}-${s.end.toFixed(2)}|${s.hookText}${s.spokenHook?.trim() ? `|${s.spokenHook.trim()}` : ""}`;
+          const stale = s.file && (drafts[s.id] || s.renderKey !== renderKey);
+          const hookPending = Boolean(s.spokenHook?.trim()) && !s.preview?.hook;
           return (
             <div key={s.id} className="shortcard">
               {s.file && !stale ? (
@@ -154,6 +158,19 @@ export function ShortsPanel(props: {
                 <div style={{ fontSize: 12 }}>{s.reason}</div>
                 <label className="muted" style={{ fontSize: 11 }}>On-screen hook</label>
                 <input className="input" maxLength={60} value={String(field(s, "hookText"))} onChange={(e) => setField(s, "hookText", e.target.value)} />
+                <label className="muted" style={{ fontSize: 11 }}>Spoken hook, read before the clip (empty = none)</label>
+                <textarea
+                  className="input"
+                  rows={2}
+                  maxLength={160}
+                  value={String(field(s, "spokenHook"))}
+                  onChange={(e) => setField(s, "spokenHook", e.target.value)}
+                />
+                {hookPending ? (
+                  <div className="muted" style={{ fontSize: 11 }}>
+                    The hook is voiced when you render; the preview plays without it until then.
+                  </div>
+                ) : null}
                 <label className="muted" style={{ fontSize: 11 }}>YouTube title (#Shorts is added)</label>
                 <input className="input" maxLength={90} value={String(field(s, "title"))} onChange={(e) => setField(s, "title", e.target.value)} />
                 <div className="row">

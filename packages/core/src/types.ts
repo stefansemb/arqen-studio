@@ -38,6 +38,8 @@ export interface Timings {
   words: Word[];
   /** Hash of script + voice + speed + model, so an unchanged voiceover is not regenerated. */
   voiceKey?: string;
+  /** The voice the narration was spoken with (missing in projects voiced before 2026-10-03). */
+  voice?: { id: string; name: string; speed: number };
 }
 
 /** scenes.json: planned scenes before assets are resolved. */

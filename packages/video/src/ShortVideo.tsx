@@ -16,6 +16,8 @@ export interface ShortVideoProps {
   hookText: string;
   /** Seconds into the long video's voiceover where this Short starts. */
   audioStartSec: number;
+  /** Spoken hook played first; `base` is already shifted by `sec` (hook audio plus a short pause). */
+  hook?: { audioSrc: string; sec: number };
 }
 
 // The 16:9 scene is scaled to the full width and sits in the upper-middle; the lower part
@@ -51,7 +53,7 @@ const Band: React.FC<{ children: React.ReactNode; top: number; scale: number; op
   </div>
 );
 
-export const ShortVideo: React.FC<ShortVideoProps> = ({ base, hookText, audioStartSec }) => {
+export const ShortVideo: React.FC<ShortVideoProps> = ({ base, hookText, audioStartSec, hook }) => {
   const { fps, durationInFrames } = useVideoConfig();
   const frame = useCurrentFrame();
   const hookIn = interpolate(frame, [0, 8], [0, 1], { extrapolateRight: "clamp" });
@@ -120,7 +122,12 @@ export const ShortVideo: React.FC<ShortVideoProps> = ({ base, hookText, audioSta
           background: theme.accent,
         }}
       />
-      {base.audioSrc ? <Audio src={base.audioSrc} trimBefore={Math.round(audioStartSec * fps)} /> : null}
+      {hook ? <Audio src={hook.audioSrc} /> : null}
+      {base.audioSrc ? (
+        <Sequence from={hook ? Math.round(hook.sec * fps) : 0} name="Voiceover">
+          <Audio src={base.audioSrc} trimBefore={Math.round(audioStartSec * fps)} />
+        </Sequence>
+      ) : null}
     </AbsoluteFill>
   );
 };

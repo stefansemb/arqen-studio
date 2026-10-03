@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { NewsVideoProps } from "@yta/video";
-import { fitShortRange, sliceVideoProps } from "../src/shorts";
+import { fitShortRange, prependHook, sliceVideoProps } from "../src/shorts";
 
 const full: NewsVideoProps = {
   title: "t",
@@ -71,5 +71,48 @@ describe("fitShortRange", () => {
     expect(fitShortRange(sentences, 3, 2, 125)).toBeNull();
     expect(fitShortRange(sentences, 0, 99, 125)).toBeNull();
     expect(fitShortRange(sentences, 4, 4, 125)).toBeNull();
+  });
+});
+
+describe("prependHook", () => {
+  const short = sliceVideoProps(full, 20, 50);
+  const hookWords = [
+    { text: "Wait", start: 0.1, end: 0.4 },
+    { text: "what?", start: 0.5, end: 1 },
+  ];
+  const h = prependHook(short, 2, hookWords);
+
+  it("moves the clip back by the hook length and leads the captions with the hook", () => {
+    expect(h.durationSec).toBe(32);
+    expect(h.words.map((w) => [w.text, w.start])).toEqual([
+      ["Wait", 0.1],
+      ["what?", 0.5],
+      ["first", 2],
+      ["middle", 17],
+      ["last", 31.5],
+    ]);
+  });
+
+  it("holds a screen recording's first frame during the hook so the clip stays in sync", () => {
+    expect(h.scenes.map((x) => [x.type, x.start, x.end])).toEqual([
+      ["clip", 0, 2],
+      ["clip", 2, 12],
+      ["broll", 12, 27],
+      ["stat", 27, 32],
+    ]);
+    expect(h.scenes[0].video).toEqual({ src: "c.mp4", startSec: 22, playbackRate: 2, playSec: 0 });
+    expect(h.scenes[1].video).toEqual(short.scenes[0].video);
+  });
+
+  it("stretches any other first scene back to cover the hook", () => {
+    const b = prependHook(sliceVideoProps(full, 30, 50), 1.5, []);
+    expect(b.scenes.map((x) => [x.type, x.start, x.end])).toEqual([
+      ["broll", 0, 16.5],
+      ["stat", 16.5, 21.5],
+    ]);
+  });
+
+  it("leaves the Short unchanged without a hook", () => {
+    expect(prependHook(short, 0, [])).toBe(short);
   });
 });

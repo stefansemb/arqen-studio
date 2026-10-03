@@ -12,7 +12,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   return NextResponse.json(shorts);
 }
 
-/** PATCH { edits: [{ id, title?, hookText?, start?, end? }] }: edit Shorts before rendering/uploading. */
+/** PATCH { edits: [{ id, title?, hookText?, spokenHook?, start?, end? }] }: edit Shorts before rendering/uploading. */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!getProject(id)) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -31,6 +31,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         end,
         title: e.title !== undefined ? String(e.title).trim().slice(0, 90) || s.title : s.title,
         hookText: e.hookText !== undefined ? String(e.hookText).trim().slice(0, 60) : s.hookText,
+        spokenHook: e.spokenHook !== undefined ? String(e.spokenHook).trim().slice(0, 160) : s.spokenHook,
       };
     });
     writeShorts(id, next);

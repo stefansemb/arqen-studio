@@ -8,6 +8,13 @@ import { concatAudio, probeDuration } from "../providers/ffmpeg";
 import { charsToWords, chunkText, scriptToText } from "../timing";
 import type { Script, Timings, Word } from "../types";
 
+/** Identifies a voiceover: same text, voice, speed and model means the same audio. */
+export function voiceoverKey(text: string, voice: { id: string; speed: number }): string {
+  return createHash("sha1")
+    .update([text, voice.id, voice.speed, process.env.ELEVENLABS_MODEL ?? ""].join("|"))
+    .digest("hex");
+}
+
 export async function generateVoice(ctx: StepContext): Promise<void> {
   const script = readJson<Script>(ctx, "script.json");
   const voice = resolveVoice(ctx.project.id);
@@ -15,9 +22,7 @@ export async function generateVoice(ctx: StepContext): Promise<void> {
   const text = scriptToText(script);
 
   // Same script, voice, speed and model as the existing voiceover: keep it instead of paying again.
-  const key = createHash("sha1")
-    .update([text, voice.id, voice.speed, process.env.ELEVENLABS_MODEL ?? ""].join("|"))
-    .digest("hex");
+  const key = voiceoverKey(text, voice);
   const timingsFile = path.join(ctx.dir, "timings.json");
   if (fs.existsSync(timingsFile) && fs.existsSync(path.join(ctx.dir, "voice.mp3"))) {
     const existing = JSON.parse(fs.readFileSync(timingsFile, "utf8")) as Timings;
@@ -54,7 +59,12 @@ export async function generateVoice(ctx: StepContext): Promise<void> {
   await concatAudio(files, out);
   fs.rmSync(tmp, { recursive: true, force: true });
 
-  const timings: Timings = { durationSec: await probeDuration(out), words, voiceKey: key };
+  const timings: Timings = {
+    durationSec: await probeDuration(out),
+    words,
+    voiceKey: key,
+    voice: { id: voice.id, name: voice.name, speed: voice.speed },
+  };
   writeJson(ctx, "timings.json", timings);
   ctx.log(`Voiceover ready: ${timings.durationSec.toFixed(1)} s, ${words.length} words`);
 }

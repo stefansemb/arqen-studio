@@ -8,7 +8,7 @@ import { buildVideoProps } from "./props";
 import { readPublish } from "./publishStore";
 import { readAppSettings } from "./settings";
 import { wordsToSentences } from "./timing";
-import type { Timings } from "./types";
+import type { Timings, Word } from "./types";
 import { getProject } from "./db";
 import { buildVideoResource, getAccessToken, uploadVideo, type UploadOptions } from "./youtube";
 
@@ -20,6 +20,10 @@ export interface ShortSpec {
   end: number;
   title: string;
   hookText: string;
+  /** Spoken before the clip in the project's voice, so the Short opens with its own hook. Empty = none. */
+  spokenHook?: string;
+  /** The synthesized spokenHook; reused while text and voice stay the same (see hookAudioKey). */
+  hookAudio?: { file: string; key: string; durationSec: number; words: Word[] };
   reason: string;
   /** Rendered file relative to the project dir. */
   file?: string;
@@ -30,6 +34,32 @@ export interface ShortSpec {
 }
 
 export const SHORT_LIMITS = { min: 20, max: 59 };
+/** Pause between the spoken hook and the clip. */
+export const HOOK_GAP_SEC = 0.25;
+
+/** Identifies a synthesized hook: voice, speed and model, then the text (buildShortProps matches the text). */
+export const hookAudioKey = (voice: { id: string; speed: number }, text: string) =>
+  `${voice.id}:${voice.speed}:${process.env.ELEVENLABS_MODEL ?? ""}|${text.trim()}`;
+
+/**
+ * Puts a spoken hook of `hookSec` seconds in front of a Short: everything moves back by hookSec,
+ * the first scene covers the hook (a screen recording holds its first frame, so the clip itself
+ * stays in sync with the voice), and the hook's words lead the captions. Pure.
+ */
+export function prependHook(props: NewsVideoProps, hookSec: number, hookWords: Word[]): NewsVideoProps {
+  const first = props.scenes[0];
+  if (!first || hookSec <= 0) return props;
+  const shifted = props.scenes.map((sc) => ({ ...sc, start: sc.start + hookSec, end: sc.end + hookSec }));
+  const scenes = first.video
+    ? [{ ...first, start: 0, end: hookSec, video: { ...first.video, playSec: 0 } }, ...shifted]
+    : [{ ...shifted[0], start: 0 }, ...shifted.slice(1)];
+  return {
+    ...props,
+    scenes,
+    words: [...hookWords, ...props.words.map((w) => ({ ...w, start: w.start + hookSec, end: w.end + hookSec }))],
+    durationSec: props.durationSec + hookSec,
+  };
+}
 
 /**
  * Cuts a long video's props down to [start, end) seconds of narration and shifts everything
@@ -73,6 +103,11 @@ const PickSchema = z.object({
       startSentence: z.number().int(),
       endSentence: z.number().int().describe("Inclusive"),
       hookText: z.string().describe("3-7 punchy words shown at the top of the Short"),
+      spokenHook: z
+        .string()
+        .describe(
+          "One sentence (6-14 words) spoken before the clip that makes a scroller stop: the most surprising claim or question from the clip itself, naming the subject. No 'In this video', no 'Let's'. Must be backed by the clip's sentences.",
+        ),
       title: z.string().describe("YouTube Shorts title, under 70 characters, no hashtags"),
       reason: z.string().describe("One sentence: why this works as a Short"),
     }),
@@ -118,7 +153,8 @@ export async function findShorts(projectId: string, count = 3): Promise<ShortSpe
 - is self-contained: the first sentence makes sense to someone who never saw the long video (no "And", "So", "this company", "as we saw" without context),
 - opens with the most surprising or useful statement, and ends on a complete thought,
 - lasts ${SHORT_LIMITS.min}-${SHORT_LIMITS.max} seconds: the end time of the last sentence minus the start time of the first must be at most ${SHORT_LIMITS.max}. A whole story or chapter is almost always too long; pick its strongest run of sentences,
-- does not overlap with another Short.`,
+- does not overlap with another Short.
+Shorts lose viewers in the first second, so each one also gets a spoken hook read before the clip.`,
     prompt: `Pick up to ${count} Shorts, best first. Fewer is fine if the video doesn't have ${count} strong moments.
 
 Sentences ([index] start-end seconds (length): text):
@@ -137,6 +173,7 @@ ${sentences.map((s) => `[${s.index}] ${s.start.toFixed(1)}-${s.end.toFixed(1)} (
       end,
       title: s.title.trim().slice(0, 90),
       hookText: s.hookText.trim().slice(0, 60),
+      spokenHook: s.spokenHook.trim().slice(0, 160),
       reason: s.reason,
     });
   }
@@ -148,7 +185,19 @@ ${sentences.map((s) => `[${s.index}] ${s.start.toFixed(1)}-${s.end.toFixed(1)} (
 export function buildShortProps(projectId: string, short: ShortSpec, baseUrl: string): ShortVideoProps | null {
   const full = buildVideoProps(projectId, baseUrl);
   if (!full) return null;
-  return { base: sliceVideoProps(full, short.start, short.end), hookText: short.hookText, audioStartSec: short.start };
+  const base = sliceVideoProps(full, short.start, short.end);
+  const h = short.hookAudio;
+  // Only a hook that was synthesized from the current text (the voice is checked when rendering).
+  if (short.spokenHook?.trim() && h && h.key.endsWith(`|${short.spokenHook.trim()}`)) {
+    const hookSec = h.durationSec + HOOK_GAP_SEC;
+    return {
+      base: prependHook(base, hookSec, h.words),
+      hookText: short.hookText,
+      audioStartSec: short.start,
+      hook: { audioSrc: `${baseUrl}/${h.file}`, sec: hookSec },
+    };
+  }
+  return { base, hookText: short.hookText, audioStartSec: short.start };
 }
 
 /** Description for a Short: the hook, a link to the full video when it's on YouTube, the footer and #Shorts. */

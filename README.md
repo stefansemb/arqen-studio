@@ -135,7 +135,7 @@ Nothing is uploaded without your approval. The news sources and the max age (def
 
 ## Shorts (Shorts tab in a project)
 
-**Find Shorts** has Claude pick up to 3 segments of 20–59 s from the finished video that work on their own. They reuse the voiceover, so they cost no ElevenLabs credits. Each Short gets an on-screen headline and a title, which you can change along with the start and end times. **Render Shorts** makes vertical 1080×1920 videos: headline at the top, the scene in the middle over a blurred background, large captions two or three words at a time, and empty space at the bottom and right where YouTube puts its buttons. **Upload Short** uploads directly, with "#Shorts" in the title and a link to the long video if it is already on YouTube.
+**Find Shorts** has Claude pick up to 3 segments of 20–59 s from the finished video that work on their own. Each Short gets an on-screen headline, a title and a **spoken hook**: one sentence read before the clip so the Short opens strong instead of mid-thought. You can change all of them along with the start and end times; an empty spoken hook means none. The clip reuses the voiceover, so only the hook costs ElevenLabs credits (about one per character, voiced once when you render). The hook uses the voice the video was narrated with and is matched to its loudness, so it sounds like one take. **Render Shorts** makes vertical 1080×1920 videos: headline at the top, the scene in the middle over a blurred background, large captions two or three words at a time, and empty space at the bottom and right where YouTube puts its buttons. **Upload Short** uploads directly, with "#Shorts" in the title and a link to the long video if it is already on YouTube.
 
 ## News watcher and autopilot (Watcher page)
 
