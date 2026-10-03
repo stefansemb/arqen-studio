@@ -12,6 +12,8 @@ URL → fetch → clips → script → scriptCheck → voice → scenes → asse
 |---|---|
 | ![Publish tab with five title suggestions and three rendered thumbnails](docs/screenshots/publish.png) | ![Watcher page with autopilot settings and stories ranked by tier](docs/screenshots/watcher.png) |
 
+**See it in action:** the videos and Shorts on [Arqen Build](https://www.youtube.com/@arqenbuild) are made with this app, from script and voice to thumbnails.
+
 <details>
 <summary>Home page: start a video from an article, a script or notes</summary>
 
