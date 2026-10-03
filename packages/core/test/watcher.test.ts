@@ -149,6 +149,8 @@ describe("Hugging Face releases", () => {
       },
     ]);
     expect(isOfficialFor("Xiaomi MiMo (Hugging Face)", "Xiaomi")).toBe(true);
+    expect(isOfficialFor("Zhipu GLM (Hugging Face)", "Zhipu")).toBe(true);
+    expect(isOfficialFor("MiniMax (Hugging Face)", "Zhipu")).toBe(false);
     expect(isOfficialFor("Kimi Blog", "Moonshot")).toBe(true);
   });
 });

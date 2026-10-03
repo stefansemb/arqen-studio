@@ -57,6 +57,9 @@ export const HF_ORGS: { org: string; name: string; company: string }[] = [
   { org: "moonshotai", name: "Moonshot (Hugging Face)", company: "Moonshot" },
   { org: "XiaomiMiMo", name: "Xiaomi MiMo (Hugging Face)", company: "Xiaomi" },
   { org: "deepseek-ai", name: "DeepSeek (Hugging Face)", company: "DeepSeek" },
+  { org: "zai-org", name: "Zhipu GLM (Hugging Face)", company: "Zhipu" },
+  { org: "MiniMaxAI", name: "MiniMax (Hugging Face)", company: "MiniMax" },
+  { org: "stepfun-ai", name: "StepFun (Hugging Face)", company: "StepFun" },
 ];
 
 /** Newest models of an org as news items ("Xiaomi releases MiMo-V2.6-Pro on Hugging Face"). */
@@ -96,7 +99,7 @@ const HN_FEED: FeedSource = { name: "Hacker News", url: "https://hnrss.org/front
 /** Broad discovery and confirmation. Their links aren't article pages, so a video is never built from them. */
 const GOOGLE_NEWS: FeedSource = {
   name: "Google News",
-  url: "https://news.google.com/rss/search?q=(OpenAI%20OR%20Anthropic%20OR%20Gemini%20OR%20DeepMind%20OR%20xAI%20OR%20Grok%20OR%20Kimi%20OR%20%22Xiaomi%20MiMo%22%20OR%20%22AI%20model%22%20OR%20%22AI%20agent%22%20OR%20%22humanoid%20robot%22)%20when:1d&hl=en-US&gl=US&ceid=US:en",
+  url: "https://news.google.com/rss/search?q=(OpenAI%20OR%20Anthropic%20OR%20Gemini%20OR%20DeepMind%20OR%20xAI%20OR%20Grok%20OR%20Kimi%20OR%20%22Xiaomi%20MiMo%22%20OR%20%22Zhipu%22%20OR%20MiniMax%20OR%20%22AI%20model%22%20OR%20%22AI%20agent%22%20OR%20%22humanoid%20robot%22)%20when:1d&hl=en-US&gl=US&ceid=US:en",
 };
 const REDDIT_SINGULARITY: FeedSource = { name: "r/singularity", url: "https://www.reddit.com/r/singularity/top/.rss?t=day" };
 /** More press: the dramatic-angle outlets big AI channels draw from, enterprise AI and robotics. */
@@ -183,7 +186,7 @@ const SOURCE_COMPANY: Record<string, string> = {
   "Moonshot Platform Blog": "Moonshot",
   ...Object.fromEntries(HF_ORGS.map((h) => [h.name, h.company])),
 };
-const COMPANIES = ["OpenAI", "Google", "Anthropic", "Meta", "xAI", "Mistral", "DeepSeek", "Alibaba", "Moonshot", "Xiaomi", "Microsoft", "NVIDIA", "Apple", "other"] as const;
+const COMPANIES = ["OpenAI", "Google", "Anthropic", "Meta", "xAI", "Mistral", "DeepSeek", "Alibaba", "Moonshot", "Xiaomi", "Zhipu", "MiniMax", "StepFun", "Microsoft", "NVIDIA", "Apple", "other"] as const;
 
 export function isOfficialFor(source: string, company: string): boolean {
   return company !== "other" && SOURCE_COMPANY[source] === company;
@@ -368,7 +371,7 @@ const SYSTEM = `You are the news desk of ${CHANNEL_NAME ? `"${CHANNEL_NAME}", ` 
 Big AI news channels publish within hours of a major release, so speed only matters for the biggest stories.
 
 Tier 1 (make a video right now), only:
-- a new flagship or frontier model, or a new major version number, from a top lab (OpenAI, Google/DeepMind, Anthropic, Meta, xAI, Mistral, DeepSeek, Alibaba/Qwen, Moonshot/Kimi, Xiaomi/MiMo, Microsoft, NVIDIA, Apple).
+- a new flagship or frontier model, or a new major version number, from a top lab (OpenAI, Google/DeepMind, Anthropic, Meta, xAI, Mistral, DeepSeek, Alibaba/Qwen, Moonshot/Kimi, Xiaomi/MiMo, Zhipu/GLM, MiniMax, StepFun, Microsoft, NVIDIA, Apple).
   Several Hugging Face uploads of variants of one release (Flash, Pro, RL, distills) are one story
   Not tier 1: faster/cheaper/mini variants of an existing model, price or rate-limit changes, and partners' posts about another lab's model (NVIDIA, cloud providers)
 - a major AI safety incident or striking safety research (models deceiving, escaping, sabotaging), when it is concrete and sourced
