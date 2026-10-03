@@ -1,130 +1,130 @@
 # Arqen AI Studio
 
-Klistra in en artikel-URL, eller ditt eget färdiga manus, och få en färdig YouTube-video (1920×1080 MP4) med AI-manus, ElevenLabs-röst, tajmade scener, B-roll från Pexels och ordmarkerade undertexter.
+Paste an article URL, or your own finished script, and get a finished YouTube video (1920×1080 MP4) with an AI-written script, an ElevenLabs voice, timed scenes, B-roll from Pexels and word-highlighted captions.
 
 ```
 URL → fetch → clips → script → scriptCheck → voice → scenes → assets → metadata → thumbnail → render → output.mp4
 ```
 
-**Från manus:** välj "From script" i UI:t (eller `--script` i CLI). Texten läses upp ordagrant; fetch, script och scriptCheck hoppas över. Separera stycken med en tom rad.
+**From script:** choose "From script" in the UI (or `--script` in the CLI). The text is read verbatim; fetch, script and scriptCheck are skipped. Separate paragraphs with a blank line.
 
-**Titel, beskrivning och thumbnail:** stegen `metadata` och `thumbnail` körs före renderingen, så en omrendering efter zoom- eller scenändringar rör inte dina titlar. Claude föreslår 5 titlar, en beskrivning, taggar (max 500 tecken), 3 hashtags och 3 thumbnailtexter. Kapitlen räknas från rösten (0:00 först, minst 3 kapitel om minst 10 s); källa och Pexels krediteras automatiskt. Tre thumbnails (1280×720) renderas med Remotion: bildrutor ur klippen för tutorials, annars artikel- och B-rollbilder. Allt redigeras under fliken **Publish**: välj titel, redigera beskrivning och taggar, kopiera, välj och ladda ner thumbnail, ändra thumbnailtext och rendera om (gratis). "Regenerate with AI" skriver över ändringarna. Sparas i `publish.json` och `thumbs/`.
+**Title, description and thumbnail:** the `metadata` and `thumbnail` steps run before rendering, so re-rendering after zoom or scene changes leaves your titles alone. Claude suggests 5 titles, a description, tags (max 500 characters), 3 hashtags and 3 thumbnail texts. Chapters are calculated from the voiceover (0:00 first, at least 3 chapters of at least 10 s), and the source and Pexels are credited automatically. Three thumbnails (1280×720) are rendered with Remotion: frames from the clips for tutorials, otherwise article and B-roll images. Everything is edited in the **Publish** tab: pick a title, edit the description and tags, copy, pick and download a thumbnail, change the thumbnail text and re-render (free). "Regenerate with AI" overwrites your edits. Saved in `publish.json` and `thumbs/`.
 
-**Röstväljare:** "Change voice" på startsidan och under Script i ett projekt listar rösterna i ditt ElevenLabs-konto ("My voices") med sökning och filter. ▶ spelar ElevenLabs gratis provljud (cachas i `data/voice-previews/`). "Hear it read this" läser din egen text med vald röst och hastighet (kostar ungefär en kredit per tecken, max 250; upprepningar är gratis). **Speed** 0,7–1,2×. "Set as default" sparar standardrösten i `data/app-settings.json`; annars gäller `ELEVENLABS_VOICE_ID`. Byter du röst i ett befintligt projekt genereras rösten om och scenerna planeras om (manuella scenändringar försvinner). Fler röster: lägg till dem från Voice Library på elevenlabs.io.
+**Voice picker:** "Change voice" on the home page and under Script in a project lists the voices in your ElevenLabs account ("My voices") with search and filters. ▶ plays ElevenLabs' free preview (cached in `data/voice-previews/`). "Hear it read this" reads your own text with the chosen voice and speed (costs about one credit per character, max 250; repeats are free). **Speed** 0.7–1.2×. "Set as default" saves the default voice in `data/app-settings.json`; otherwise `ELEVENLABS_VOICE_ID` applies. Changing the voice in an existing project regenerates the voiceover and re-plans the scenes (manual scene edits are lost). For more voices, add them from the Voice Library on elevenlabs.io.
 
-**Från anteckningar:** välj "From notes", skriv en punktlista, välj mall och längd och lägg till klipp om du vill. Claude skriver manuset utifrån anteckningarna och det som syns i klippen; därför analyseras klippen före manuset. Med "Let me review the script" (på som standard) stannar pipelinen med status **review** efter faktagranskningen: redigera manuset under Script och tryck **Continue**, så genereras rösten först då. Manuset går att redigera i alla projekt (sedan "Regenerate voice"). I CLI: `--notes anteckningar.txt --duration 2 [--clips <mapp>] [--to scriptCheck]`.
+**From notes:** choose "From notes", write a bullet list, pick a template and length, and add clips if you like. Claude writes the script from the notes and what is visible in the clips, which is why the clips are analyzed before the script. With "Let me review the script" (on by default), the pipeline stops with status **review** after the fact check: edit the script under Script and press **Continue**, and only then is the voiceover generated. The script can be edited in any project (then "Regenerate voice"). In the CLI: `--notes notes.txt --duration 2 [--clips <folder>] [--to scriptCheck]`.
 
-**Tutorials med egna klipp:** välj "From script" och mallen "Tutorial", och dra in tysta skärminspelningar (MP4/MOV/WebM/MKV). Steget `clips` konverterar dem till H.264 med 30 fps. Claude beskriver sedan vad som syns när, och scenplaneringen visar rätt del av rätt klipp vid rätt replik. Klipp som är längre än repliken snabbas upp (max 2,5×) och klipp som är kortare fryser på sista bildrutan. I CLI: `--niche tutorial --clips <mapp>`.
+**Tutorials with your own clips:** choose "From script" and the "Tutorial" template, and drop in silent screen recordings (MP4/MOV/WebM/MKV). The `clips` step converts them to H.264 at 30 fps. Claude then describes what is visible when, and scene planning shows the right part of the right clip at the right line. Clips longer than the line are sped up (max 2.5×), and shorter clips freeze on the last frame. In the CLI: `--niche tutorial --clips <folder>`.
 
-**Automatisk zoom:** steget `clips` jämför bildrutor (320×180, 10 per sekund) och ser var på skärmen något händer: markörrörelser, skrivande, klick som ändrar något. Kameran zoomar in mot det (max 1,8×), följer mjukt och zoomar ut vid sidbyten och scrollning eller efter 2,5 s stillhet. Det kräver inga API-anrop. Under "Scene preview" finns reglagen **Strength** (1,2–2,5×) och **Tempo** (Calm–Snappy) per projekt. Klippsteget sparar aktivitetsdatan (`clips/<id>.activity.json`), så ändringar syns i förhandsvisningen inom någon sekund och **Render** ger en ny video utan API-kostnader. Zoomen kan stängas av per scen i scenredigeraren. Standardvärden och finjustering finns i `ZOOM` i `packages/core/src/zoom.ts`. Inspelningen innehåller ingen markörposition, så en markör som rör sig över en helt stillastående skärm följs, men väldigt små rörelser räknas som brus.
+**Automatic zoom:** the `clips` step compares frames (320×180, 10 per second) to find where something happens on screen: cursor movement, typing, clicks that change something. The camera zooms in on it (max 1.8×), follows smoothly, and zooms out on page changes and scrolling or after 2.5 s of stillness. No API calls are needed. Under "Scene preview" there are **Strength** (1.2–2.5×) and **Tempo** (Calm–Snappy) controls per project. The clips step saves the activity data (`clips/<id>.activity.json`), so changes show up in the preview within a second, and **Render** produces a new video with no API cost. Zoom can be turned off per scene in the scene editor. Defaults and fine-tuning live in `ZOOM` in `packages/core/src/zoom.ts`. Recordings contain no cursor position, so a cursor moving over a completely still screen is followed, but very small movements are treated as noise.
 
-**Redigera scener:** klicka på en scen under "Scene preview" för att byta klipp, ändra klippets start och slut, byta till titelkort eller B-roll, eller ändra stegetiketten. **Save** uppdaterar förhandsvisningen och **Save & render** renderar om videon utan nya AI- eller TTS-anrop. Scenernas tider följer alltid rösten.
+**Edit scenes:** click a scene under "Scene preview" to swap the clip, change the clip's start and end, switch to a title card or B-roll, or change the step label. **Save** updates the preview and **Save & render** re-renders the video without new AI or TTS calls. Scene timing always follows the voiceover.
 
-## Kom igång
+## Getting started
 
-Förutsätter Node 24+ och ffmpeg/ffprobe i PATH. Första renderingen laddar ner Chrome Headless Shell (~110 MB).
+Requires Node 24+ and ffmpeg/ffprobe on your PATH. The first render downloads Chrome Headless Shell (~110 MB).
 
-1. Kopiera `.env.example` till `.env`, sätt `CHANNEL_NAME` och fyll i nycklarna:
+1. Copy `.env.example` to `.env`, set `CHANNEL_NAME` and fill in the keys:
    - `ANTHROPIC_API_KEY`: https://console.anthropic.com
    - `ELEVENLABS_API_KEY`: https://elevenlabs.io/app/settings/api-keys
-   - `PEXELS_API_KEY` (gratis): https://www.pexels.com/api/
-   - Valfritt: `YOUTUBE_CLIENT_ID`/`YOUTUBE_CLIENT_SECRET` (se [YouTube-uppladdning](#youtube-uppladdning)) och `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` (notiser från nyhetsbevakaren).
+   - `PEXELS_API_KEY` (free): https://www.pexels.com/api/
+   - Optional: `YOUTUBE_CLIENT_ID`/`YOUTUBE_CLIENT_SECRET` (see [YouTube upload](#youtube-upload)) and `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` (notifications from the news watcher).
 2. `npm install`
-3. `npm run dev` och öppna http://localhost:3000
-4. Gå till **Settings** och fyll i din kanals beskrivning, standardtext i videobeskrivningen och prenumerationslänk.
+3. `npm run dev` and open http://localhost:3000
+4. Go to **Settings** and fill in your channel description, the default video description text and your subscribe link.
 
-Allt du skapar (projekt, videor, databas, YouTube-inloggning) sparas i `data/`, som aldrig checkas in.
+Everything you create (projects, videos, database, YouTube sign-in) is stored in `data/`, which is never committed.
 
-## Kommandon
+## Commands
 
-| Kommando | Vad |
+| Command | What it does |
 |---|---|
-| `npm run dev` | Webb-UI (port 3000) + worker som kör jobbkön |
-| `npm run pipeline -- --url <url> --duration 4` | Kör hela kedjan i terminalen |
-| `npm run pipeline -- --script manus.txt --title "Titel"` | Video från eget manus |
-| `npm run pipeline -- --script manus.txt --niche tutorial --clips <mapp>` | Tutorial med egna skärminspelningar |
-| `npm run pipeline -- --url <url> --to script` | Stanna efter ett steg (t.ex. för att granska manus innan du betalar för TTS) |
-| `npm run pipeline -- --project <id> --from voice` | Kör om från ett visst steg |
-| `npm test` / `npm run typecheck` | Enhetstester / typkontroll |
+| `npm run dev` | Web UI (port 3000) + worker that runs the job queue |
+| `npm run pipeline -- --url <url> --duration 4` | Runs the whole chain in the terminal |
+| `npm run pipeline -- --script script.txt --title "Title"` | Video from your own script |
+| `npm run pipeline -- --script script.txt --niche tutorial --clips <folder>` | Tutorial with your own screen recordings |
+| `npm run pipeline -- --url <url> --to script` | Stops after a step (e.g. to review the script before paying for TTS) |
+| `npm run pipeline -- --project <id> --from voice` | Reruns from a given step |
+| `npm test` / `npm run typecheck` | Unit tests / type check |
 
-npm-skripten anropar `node <sökväg>` direkt i stället för `node_modules\.bin`-genvägarna, så att de fungerar även där grupprinciper blockerar `*.cmd`-filer.
+The npm scripts call `node <path>` directly instead of the `node_modules\.bin` shims, so they also work where group policy blocks `*.cmd` files.
 
-## Struktur
+## Structure
 
 ```
-apps/web/            Next.js-UI + API (projekt, kö, filservering med Range-stöd)
-apps/worker/         Pollar jobbkön i SQLite och kör pipelinen
-packages/core/       Pipeline-steg, providers (Claude, ElevenLabs, Pexels, ffmpeg), SQLite
-packages/video/      Remotion-komposition (scentyper, undertexter, branding)
-data/                studio.db + projects/<id>/ med alla artefakter (gitignorerad)
+apps/web/            Next.js UI + API (projects, queue, file serving with Range support)
+apps/worker/         Polls the job queue in SQLite and runs the pipeline
+packages/core/       Pipeline steps, providers (Claude, ElevenLabs, Pexels, ffmpeg), SQLite
+packages/video/      Remotion compositions (scene types, captions, branding)
+data/                studio.db + projects/<id>/ with all artifacts (gitignored)
 ```
 
-Varje steg läser och skriver filer i `data/projects/<id>/` (`article.json`, `script.json`, `script-check.json`, `voice.mp3`, `timings.json`, `scenes.json`, `assets/`, `output.mp4`). Därför kan du redigera till exempel `script.json` för hand och köra om från `voice`.
+Each step reads and writes files in `data/projects/<id>/` (`article.json`, `script.json`, `script-check.json`, `voice.mp3`, `timings.json`, `scenes.json`, `assets/`, `output.mp4`). So you can, for example, edit `script.json` by hand and rerun from `voice`.
 
-## Licens
+## License
 
-Koden är MIT-licensierad (se `LICENSE`). Tredjepartsberoenden har egna villkor:
+The code is MIT licensed (see `LICENSE`). Third-party dependencies have their own terms:
 
-- **Remotion** är gratis för privatpersoner och företag med högst 3 anställda. Om du säljer appen som SaaS eller white-label krävs en företagslicens (https://remotion.dev/license).
-- **Pexels**-bilder får användas kommersiellt. Artikelbilder (`article`-scener) är upphovsrättsskyddade och används som nyhetskommentar; håll nere antalet.
+- **Remotion** is free for individuals and companies with up to 3 employees. Selling the app as SaaS or white-label requires a company license (https://remotion.dev/license).
+- **Pexels** images may be used commercially. Article images (`article` scenes) are copyrighted and used as news commentary; keep their number low.
 
-## YouTube-uppladdning
+## YouTube upload
 
-Uppladdning sker bara när du trycker **Upload to YouTube** i fliken Publish. Titel, beskrivning, taggar och vald thumbnail följer med. Du väljer synlighet (Private, Unlisted, Public eller schemalagd), kategori, om prenumeranter ska aviseras och YouTubes märkning för AI-genererat innehåll. Uppladdningen är återupptagbar, så stora filer skickas i bitar och fortsätter efter nätverksavbrott. Samma video laddas inte upp två gånger utan att du bekräftar.
+Uploads only happen when you press **Upload to YouTube** in the Publish tab. Title, description, tags and the chosen thumbnail are included. You choose visibility (Private, Unlisted, Public or scheduled), category, whether subscribers are notified, and YouTube's label for AI-generated content. Uploads are resumable, so large files are sent in chunks and continue after network interruptions. The same video is never uploaded twice without your confirmation.
 
-### Engångsinställning i Google Cloud (cirka 10 minuter)
+### One-time setup in Google Cloud (about 10 minutes)
 
-Varje användare skapar sin egen OAuth-klient; appen har ingen gemensam inloggning.
+Each user creates their own OAuth client; the app has no shared sign-in.
 
-1. Gå till https://console.cloud.google.com och skapa ett projekt, till exempel "Arqen AI Studio".
-2. **APIs & Services → Library**: sök upp **YouTube Data API v3** och tryck **Enable**.
+1. Go to https://console.cloud.google.com and create a project, for example "Arqen AI Studio".
+2. **APIs & Services → Library**: find **YouTube Data API v3** and press **Enable**.
 3. **OAuth consent screen** (Google Auth Platform):
-   - Välj User type **External** och fyll i appnamn och e-post.
-   - Under **Data access / Scopes** lägger du till `.../auth/youtube.upload` och `.../auth/youtube.readonly`.
-   - Under **Audience / Test users** lägger du till Google-kontot som äger kanalen.
-4. **Clients → Create client**: välj typen **Web application** och lägg till följande under *Authorized redirect URIs*:
+   - Choose User type **External** and fill in the app name and email.
+   - Under **Data access / Scopes**, add `.../auth/youtube.upload` and `.../auth/youtube.readonly`.
+   - Under **Audience / Test users**, add the Google account that owns the channel.
+4. **Clients → Create client**: choose the type **Web application** and add this under *Authorized redirect URIs*:
    `http://localhost:3000/api/youtube/callback`
-5. Kopiera Client ID och Client secret till `.env`:
+5. Copy the Client ID and Client secret to `.env`:
    ```
    YOUTUBE_CLIENT_ID=...apps.googleusercontent.com
    YOUTUBE_CLIENT_SECRET=...
    ```
-6. Starta om appen och tryck **Connect YouTube** i fliken Publish. Logga in med kanalens konto och godkänn.
+6. Restart the app and press **Connect YouTube** in the Publish tab. Sign in with the channel's account and approve.
 
-### Bra att veta
+### Good to know
 
-- **Videor blir privata tills Google har granskat ditt API-projekt.** YouTube låser API-uppladdningar från ogranskade projekt till "private". Publicera dem manuellt i YouTube Studio (knappen *Open in Studio*), eller ansök om granskning via YouTube API Services Audit.
-- **Inloggningen gäller i 7 dagar** så länge OAuth-appen har statusen *Testing*. Anslut sedan igen, eller sätt appen till *In production*. Då visas en varning om overifierad app när du loggar in (välj *Advanced → Go to app*), men inloggningen går inte ut.
-- **Kvot:** en uppladdning kostar cirka 1 600 av 10 000 enheter per dygn, alltså ungefär 6 uppladdningar per dag.
-- **Egna thumbnails** kräver en telefonverifierad kanal (https://www.youtube.com/verify). Annars laddas videon upp ändå, och du får en varning i loggen.
-- Inloggningen sparas i `data/youtube-token.json`. **Disconnect** återkallar den hos Google och tar bort filen.
+- **Videos stay private until Google has audited your API project.** YouTube locks API uploads from unaudited projects to "private". Publish them manually in YouTube Studio (the *Open in Studio* button), or apply for an audit via the YouTube API Services Audit.
+- **The sign-in lasts 7 days** while the OAuth app has the status *Testing*. Then reconnect, or set the app to *In production*. You will then see an unverified-app warning when signing in (choose *Advanced → Go to app*), but the sign-in no longer expires.
+- **Quota:** an upload costs about 1,600 of 10,000 units per day, so roughly 6 uploads per day.
+- **Custom thumbnails** require a phone-verified channel (https://www.youtube.com/verify). Otherwise the video is still uploaded, and you get a warning in the log.
+- The sign-in is stored in `data/youtube-token.json`. **Disconnect** revokes it with Google and deletes the file.
 
-## Kanalinställningar (sidan Settings)
+## Channel settings (Settings page)
 
-- **Kanalprofil:** beskrivning (max 1000 tecken), nyckelord (max 500) och land. **Save & apply to YouTube** skickar dem till kanalen.
-- **Kanalgrafik:** `npm run channel-art -- [--tagline "..."] [--topics "AI News,Tutorials"]` renderar profilbilder (bland annat 3D-"A") och en banner till `data/channel/`. Bannern kan laddas upp härifrån. Profilbilden laddar du upp själv i YouTube Studio (Customization → Branding), eftersom API:t inte kan sätta den.
-- **Varje video:** standardtext i beskrivningen (efter kapitel och källor), en valfri kort intro (avstängd som standard) och en slutskärm på 5–20 s. Lägg till YouTubes rutor för prenumeration och nästa video ovanpå slutskärmen i Studio.
-- **Spellistor:** uppladdningar läggs automatiskt i spellistan för mallen och skapas om den saknas.
-- **Standardröst.**
+- **Channel profile:** description (max 1,000 characters), keywords (max 500) and country. **Save & apply to YouTube** sends them to the channel.
+- **Channel art:** `npm run channel-art -- [--tagline "..."] [--topics "AI News,Tutorials"]` renders profile pictures (including a 3D "A") and a banner to `data/channel/`. The banner can be uploaded from here. Upload the profile picture yourself in YouTube Studio (Customization → Branding), since the API cannot set it.
+- **Every video:** default description text (after chapters and sources), an optional short intro (off by default) and an end screen of 5–20 s. Add YouTube's subscribe and next-video elements on top of the end screen in Studio.
+- **Playlists:** uploads are added automatically to the template's playlist, which is created if it is missing.
+- **Default voice.**
 
-Att hantera kanal och spellistor kräver behörigheten `https://www.googleapis.com/auth/youtube`. Lägg till den under Data Access i Google Cloud och tryck **Reconnect** på sidan Settings.
+Managing the channel and playlists requires the `https://www.googleapis.com/auth/youtube` scope. Add it under Data Access in Google Cloud and press **Reconnect** on the Settings page.
 
-## Batch och nyhetsförslag (sidan Batch)
+## Batch and news suggestions (Batch page)
 
-1. **Find today's AI stories** läser nyhetsflödena (TechCrunch, The Verge, Ars Technica, MIT Technology Review, Wired, The Decoder, OpenAI, Google AI och Hugging Face). Claude väljer de starkaste nyheterna, slår ihop samma nyhet från flera källor och hoppar över sådant kanalen redan gjort. Det kostar några cent och tar cirka 10–30 sekunder.
-2. Bocka i nyheterna du vill ha, och klistra eventuellt in egna länkar. Välj längd och röst och tryck **Make videos**. Videorna görs en i taget hela vägen till färdig video, titel och thumbnail. Sidan visar ungefärlig kreditkostnad, och kvarvarande krediter om ElevenLabs-nyckeln har behörigheten *User: Read*.
-3. Under **Ready for approval** hamnar färdiga videor som inte laddats upp än. Titta på dem, justera titel och thumbnail vid behov, bocka i och tryck **Approve & upload**. **Schedule** lägger en video per dag vid vald tid på nästa lediga dag.
+1. **Find today's AI stories** reads the news feeds (TechCrunch, The Verge, Ars Technica, MIT Technology Review, Wired, The Decoder, OpenAI, Google AI and Hugging Face). Claude picks the strongest stories, merges the same story from several sources and skips what the channel has already covered. It costs a few cents and takes about 10–30 seconds.
+2. Tick the stories you want, and optionally paste your own links. Choose length and voice and press **Make videos**. The videos are made one at a time, all the way to finished video, title and thumbnail. The page shows the approximate credit cost, and the remaining credits if the ElevenLabs key has the *User: Read* permission.
+3. Finished videos that have not been uploaded yet end up under **Ready for approval**. Watch them, adjust the title and thumbnail if needed, tick them and press **Approve & upload**. **Schedule** puts one video per day at the chosen time on the next free day.
 
-Inget laddas upp utan att du godkänner det. Nyhetskällorna och maxåldern (standard 72 h) ligger i `data/app-settings.json` under `autopilot`.
+Nothing is uploaded without your approval. The news sources and the max age (default 72 h) are in `data/app-settings.json` under `autopilot`.
 
-**Veckosammanfattning:** välj flera nyheter på sidan Batch och **One roundup video** (8, 10 eller 13 minuter, 2–8 nyheter). Videon börjar med en inledning som lockar med de största nyheterna och får sedan ett avsnitt per nyhet med övergångar; varje nyhet blir ett eget kapitel. Märket i videon är "THIS WEEK IN AI", alla källor listas i beskrivningen och videon hamnar i spellistan "This Week in AI".
+**Weekly roundup:** select several stories on the Batch page and **One roundup video** (8, 10 or 13 minutes, 2–8 stories). The video opens with a teaser of the biggest stories, then has one segment per story with transitions; each story becomes its own chapter. The badge in the video is "THIS WEEK IN AI", all sources are listed in the description, and the video goes into the "This Week in AI" playlist.
 
-## Shorts (fliken Shorts i ett projekt)
+## Shorts (Shorts tab in a project)
 
-**Find Shorts** låter Claude välja upp till 3 avsnitt på 20–59 s ur den färdiga videon som fungerar på egen hand. De återanvänder rösten, så de kostar inga ElevenLabs-krediter. Varje Short får en rubrik i bild och en titel, som du kan ändra tillsammans med start- och sluttid. **Render Shorts** gör vertikala videor i 1080×1920: rubrik överst, scenen i mitten mot suddig bakgrund, stora undertexter med två eller tre ord i taget, och tomt längst ner och till höger där YouTube lägger sina knappar. **Upload Short** laddar upp direkt, med "#Shorts" i titeln och en länk till den långa videon om den redan finns på YouTube.
+**Find Shorts** has Claude pick up to 3 segments of 20–59 s from the finished video that work on their own. They reuse the voiceover, so they cost no ElevenLabs credits. Each Short gets an on-screen headline and a title, which you can change along with the start and end times. **Render Shorts** makes vertical 1080×1920 videos: headline at the top, the scene in the middle over a blurred background, large captions two or three words at a time, and empty space at the bottom and right where YouTube puts its buttons. **Upload Short** uploads directly, with "#Shorts" in the title and a link to the long video if it is already on YouTube.
 
-## Nyhetsbevakare och autopilot (sidan Watcher)
+## News watcher and autopilot (Watcher page)
 
-Avstängd som standard. När den är på läser workern AI-labbens egna flöden och sidor, nyhetsflödena och Hacker News var 15:e minut. Claude ger varje ny artikel nivå 1 (video nu), 2 (veckosammanfattning) eller 0. En nyhet räknas först när den är bekräftad, alltså från en officiell källa eller minst två medier. Spärrar för max antal videor per vecka, väntetid mellan videor och minsta antal ElevenLabs-krediter kvar ställs in på sidan.
+Off by default. When it is on, the worker reads the AI labs' own feeds and pages, the news feeds and Hacker News every 15 minutes. Claude gives each new article tier 1 (video now), 2 (weekly roundup) or 0. A story only counts once it is confirmed, meaning it comes from an official source or at least two outlets. Limits for max videos per week, cooldown between videos and minimum ElevenLabs credits left are set on the page.
 
-**Autopilot** (av som standard) bygger och schemalägger videon automatiskt för nivå 1-nyheter. Med Telegram kopplat får du en notis med en **Stop**-knapp som gör videon privat inom stoppperioden (standard 30 min). Koppla Telegram före autopiloten: skapa en bot hos @BotFather, lägg token i `TELEGRAM_BOT_TOKEN`, skicka /start till boten och lägg chat-id:t den svarar med i `TELEGRAM_CHAT_ID`. **Send test** på Watcher-sidan kontrollerar kopplingen.
+**Autopilot** (off by default) builds and schedules the video automatically for tier 1 stories. With Telegram connected, you get a notification with a **Stop** button that makes the video private within the kill window (default 30 min). Connect Telegram before turning on autopilot: create a bot with @BotFather, put the token in `TELEGRAM_BOT_TOKEN`, send /start to the bot and put the chat id it replies with in `TELEGRAM_CHAT_ID`. **Send test** on the Watcher page checks the connection.
