@@ -6,6 +6,18 @@ Paste an article URL, or your own finished script, and get a finished YouTube vi
 URL → fetch → clips → script → scriptCheck → voice → scenes → assets → metadata → thumbnail → render → output.mp4
 ```
 
+![Scene preview: the pipeline on the left, the rendered video with B-roll and word-highlighted captions on the right](docs/screenshots/scenes.png)
+
+| Titles and thumbnails | Breaking-news watcher |
+|---|---|
+| ![Publish tab with five title suggestions and three rendered thumbnails](docs/screenshots/publish.png) | ![Watcher page with autopilot settings and stories ranked by tier](docs/screenshots/watcher.png) |
+
+<details>
+<summary>Home page: start a video from an article, a script or notes</summary>
+
+![Home page with the three input modes, voice picker and duration](docs/screenshots/home.png)
+</details>
+
 **From script:** choose "From script" in the UI (or `--script` in the CLI). The text is read verbatim; fetch, script and scriptCheck are skipped. Separate paragraphs with a blank line.
 
 **Title, description and thumbnail:** the `metadata` and `thumbnail` steps run before rendering, so re-rendering after zoom or scene changes leaves your titles alone. Claude suggests 5 titles, a description, tags (max 500 characters), 3 hashtags and 3 thumbnail texts. Chapters are calculated from the voiceover (0:00 first, at least 3 chapters of at least 10 s), and the source and Pexels are credited automatically. Three thumbnails (1280×720) are rendered with Remotion: frames from the clips for tutorials, otherwise article and B-roll images. Everything is edited in the **Publish** tab: pick a title, edit the description and tags, copy, pick and download a thumbnail, change the thumbnail text and re-render (free). "Regenerate with AI" overwrites your edits. Saved in `publish.json` and `thumbs/`.
