@@ -7,17 +7,15 @@ import type { ProjectRow } from "@yta/core/db";
 import type { VoiceChoice } from "@yta/core/tts";
 import { useDefaultVoice, VoicePicker } from "./VoicePicker";
 import { DemoPanel } from "./DemoPanel";
+import { channelLabel, durationChoices, useChannels, type TemplateInfo } from "./useChannels";
 
-type ListedProject = ProjectRow & { youtubeTitle?: string; youtubeUrl?: string };
+type ListedProject = ProjectRow & { youtubeTitle?: string; youtubeUrl?: string; channelName?: string };
 
 const DURATIONS = [4, 8, 13];
 const NOTE_DURATIONS = [1, 2, 4, 8];
 const WORDS_PER_MINUTE = 150;
-
-const TEMPLATES = [
-  { id: "ai-news", label: "AI News" },
-  { id: "tutorial", label: "Tutorial" },
-];
+/** Templates offered for scripts and notes on the default channel (the roundup is made from the Batch page). */
+const DEFAULT_CHANNEL_TEMPLATES = ["ai-news", "tutorial"];
 const VIDEO_EXTENSIONS = [".mp4", ".mov", ".webm", ".mkv", ".m4v"];
 
 function formatBytes(n: number): string {
@@ -41,13 +39,16 @@ function ScriptInput(props: {
   setFiles: (f: File[]) => void;
   busy: boolean;
   progress: string | null;
+  templates: TemplateInfo[];
+  durations: number[];
 }) {
   const [dragging, setDragging] = useState(false);
   const notes = props.variant === "notes";
+  const wpm = props.templates.find((t) => t.id === props.niche)?.wordsPerMinute ?? WORDS_PER_MINUTE;
   const words = props.script.split(/\s+/).filter(Boolean).length;
-  const minutes = words / WORDS_PER_MINUTE;
+  const minutes = words / wpm;
   const stats = notes
-    ? `${words} words of notes · AI writes ~${props.duration * WORDS_PER_MINUTE} words (~${(props.duration * WORDS_PER_MINUTE * 6).toLocaleString()} ElevenLabs credits)`
+    ? `${words} words of notes · AI writes ~${props.duration * wpm} words (~${(props.duration * wpm * 6).toLocaleString()} ElevenLabs credits)`
     : `${words} words · ~${minutes < 1 ? `${Math.round(minutes * 60)} s` : `${minutes.toFixed(1)} min`} · ~${props.script.length.toLocaleString()} ElevenLabs credits`;
 
   function addFiles(list: FileList | null) {
@@ -61,7 +62,7 @@ function ScriptInput(props: {
     <>
       <div className="row">
         <span className="label">Template</span>
-        {TEMPLATES.map((t) => (
+        {props.templates.map((t) => (
           <button
             type="button"
             key={t.id}
@@ -75,7 +76,7 @@ function ScriptInput(props: {
       {notes ? (
         <div className="row">
           <span className="label">Duration</span>
-          {NOTE_DURATIONS.map((d) => (
+          {props.durations.map((d) => (
             <button
               type="button"
               key={d}
@@ -189,13 +190,23 @@ function uploadClip(projectId: string, file: File, onProgress: (fraction: number
 
 export default function Home() {
   const router = useRouter();
+  const { channels, templates: allTemplates, selected: channel, select: selectChannel } = useChannels();
+  const channelId = channel?.id ?? "default";
+  const isDefaultChannel = channelId === "default";
+  // The channel's templates; the default channel keeps its original choices.
+  const templates = (isDefaultChannel ? DEFAULT_CHANNEL_TEMPLATES : (channel?.templates ?? []))
+    .map((id) => allTemplates.find((t) => t.id === id))
+    .filter((t): t is TemplateInfo => Boolean(t));
+  const urlTemplate = isDefaultChannel ? allTemplates.find((t) => t.id === "ai-news") : templates[0];
   const [mode, setMode] = useState<"url" | "script" | "notes">("url");
   const [url, setUrl] = useState("");
   const [script, setScript] = useState("");
   const [notes, setNotes] = useState("");
   const [noteDuration, setNoteDuration] = useState(2);
   const [review, setReview] = useState(true);
-  const defaultVoice = useDefaultVoice();
+  /** "From article": pause for script review. Off on the default channel (its news videos run straight through). */
+  const [urlReview, setUrlReview] = useState(false);
+  const defaultVoice = useDefaultVoice(channelId);
   // null = use the app default; set once the user picks something for this video.
   const [voice, setVoice] = useState<VoiceChoice | null>(null);
   const [title, setTitle] = useState("");
@@ -206,6 +217,22 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [projects, setProjects] = useState<ListedProject[]>([]);
+
+  // Switching channel resets the per-video choices to that channel's defaults.
+  useEffect(() => {
+    if (!channel) return;
+    setVoice(null);
+    setUrlReview(!isDefaultChannel);
+    if (isDefaultChannel) {
+      setNiche(mode === "notes" ? "tutorial" : "ai-news");
+      setDuration(4);
+      setNoteDuration(2);
+    } else {
+      setNiche(channel.templates[0]);
+      setDuration(channel.defaultDurationMin);
+      setNoteDuration(channel.defaultDurationMin);
+    }
+  }, [channel?.id]);
 
   useEffect(() => {
     const load = () => fetch("/api/projects").then((r) => r.json()).then(setProjects).catch(() => {});
@@ -239,10 +266,10 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           mode === "url"
-            ? { url, durationMin: duration, niche: "ai-news", voice: voice ?? undefined }
+            ? { url, durationMin: duration, niche: urlTemplate?.id ?? "ai-news", voice: voice ?? undefined, channelId, review: urlReview }
             : mode === "notes"
-              ? { notes, title, niche, durationMin: noteDuration, review, draft: withClips, voice: voice ?? undefined }
-              : { script, title, niche, draft: withClips, voice: voice ?? undefined },
+              ? { notes, title, niche, durationMin: noteDuration, review, draft: withClips, voice: voice ?? undefined, channelId }
+              : { script, title, niche, draft: withClips, voice: voice ?? undefined, channelId },
         ),
       });
       const data = await res.json();
@@ -274,6 +301,22 @@ export default function Home() {
     <main className="container stack">
       <form className="panel stack" onSubmit={run}>
         <h2>New video</h2>
+        {channels.length > 1 ? (
+          <div className="row">
+            <span className="label">Channel</span>
+            {channels.map((c) => (
+              <button
+                type="button"
+                key={c.id}
+                className={`pill ${c.id === channelId ? "active" : ""}`}
+                onClick={() => selectChannel(c.id)}
+                disabled={busy}
+              >
+                {channelLabel(c)}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <div className="row">
           <button type="button" className={`pill ${mode === "url" ? "active" : ""}`} onClick={() => setMode("url")}>
             {"🔗"} From article
@@ -286,7 +329,7 @@ export default function Home() {
             className={`pill ${mode === "notes" ? "active" : ""}`}
             onClick={() => {
               setMode("notes");
-              setNiche("tutorial");
+              if (isDefaultChannel) setNiche("tutorial");
             }}
           >
             {"📝"} From notes
@@ -294,6 +337,7 @@ export default function Home() {
         </div>
 
         <VoicePicker
+          channel={channelId}
           value={voice ?? defaultVoice}
           onChange={setVoice}
           sampleText={mode === "script" ? script.slice(0, 250) : ""}
@@ -305,7 +349,7 @@ export default function Home() {
             <div className="row">
               <input
                 className="input"
-                placeholder="https://techcrunch.com/2026/..."
+                placeholder={isDefaultChannel ? "https://techcrunch.com/2026/..." : "https://en.wikipedia.org/wiki/..."}
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 autoFocus
@@ -316,16 +360,20 @@ export default function Home() {
             </div>
             <div className="row">
               <span className="label">Niche</span>
-              <span className="pill active">AI News</span>
+              <span className="pill active">{urlTemplate?.label ?? "AI News"}</span>
             </div>
             <div className="row">
               <span className="label">Duration</span>
-              {DURATIONS.map((d) => (
+              {durationChoices(channel, DURATIONS).map((d) => (
                 <button type="button" key={d} className={`pill ${d === duration ? "active" : ""}`} onClick={() => setDuration(d)}>
                   {d} min
                 </button>
               ))}
             </div>
+            <label className="row" style={{ gap: 8, cursor: "pointer", fontSize: 13 }}>
+              <input type="checkbox" checked={urlReview} onChange={(e) => setUrlReview(e.target.checked)} />
+              Let me review the script before the voiceover is generated
+            </label>
           </>
         ) : (
           <ScriptInput
@@ -345,6 +393,8 @@ export default function Home() {
             setFiles={setFiles}
             busy={busy}
             progress={progress}
+            templates={templates}
+            durations={durationChoices(channel, NOTE_DURATIONS)}
           />
         )}
         {error ? <div className="error">{error}</div> : null}
@@ -363,6 +413,7 @@ export default function Home() {
                 <div>
                   <div className="project-title">{p.youtubeTitle ?? p.title ?? p.url}</div>
                   <div className="muted" style={{ fontSize: 12 }}>
+                    {channels.length > 1 && p.channelName ? `${p.channelName} · ` : ""}
                     {new Date(p.created_at).toLocaleString()} · {p.duration_min} min{p.current_step ? ` · ${p.current_step}` : ""}
                     {p.youtubeTitle && p.title && p.youtubeTitle !== p.title ? ` · project: ${p.title}` : ""}
                   </div>

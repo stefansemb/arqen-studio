@@ -8,6 +8,7 @@ import { normalizeScenes, wordsToSentences } from "../timing";
 import type { Article, ClipInfo, PlannedScene, Timings } from "../types";
 import { planDemoScenes } from "../demo/project";
 
+/** Default average scene length; templates can set their own (sceneSeconds). */
 const TARGET_SCENE_SEC = 7;
 
 const ScenesSchema = z.object({
@@ -49,7 +50,10 @@ export async function planScenes(ctx: StepContext): Promise<void> {
   const clips = readClips(ctx);
   const template = getTemplate(ctx.project.niche);
   const sentences = wordsToSentences(timings.words);
-  const target = Math.max(3, Math.round(timings.durationSec / TARGET_SCENE_SEC));
+  const sceneSec = template.sceneSeconds ?? TARGET_SCENE_SEC;
+  const target = Math.max(3, Math.round(timings.durationSec / sceneSec));
+  // Templates can rule out the source page's own images (mixed licenses); B-roll then comes from licensed archives.
+  const articleImages = template.articleScenes === false ? 0 : article.images.length;
   ctx.log(`Planning ~${target} scenes over ${sentences.length} sentences${clips.length ? ` with ${clips.length} clip(s)` : ""}`);
 
   const clipRules = clips.length
@@ -75,10 +79,10 @@ Scene types:
 - stat: a big number. sub = the number as it should appear (e.g. "$40B", "3x", "92%"), text = short label.
 - article: shows an image from the source article with a caption in text.
 ${template.sceneGuidance}`,
-    prompt: `Plan about ${target} scenes (roughly one every ${TARGET_SCENE_SEC} seconds; never longer than ${clips.length ? 20 : 15} seconds).
+    prompt: `Plan about ${target} scenes (roughly one every ${sceneSec} seconds; never longer than ${clips.length ? 20 : Math.max(15, sceneSec + 6)} seconds).
 Scenes must be listed in order, the first must start at sentence 0, and each scene lasts until the next one starts.
 Avoid more than two card scenes (title/quote/stat) in a row. Don't repeat the same stock query.
-${article.images.length ? `The source article has ${article.images.length} image(s) available for "article" scenes; use at most ${article.images.length}.` : `There are no article images, so do not use "article" scenes.`}
+${articleImages ? `The source article has ${articleImages} image(s) available for "article" scenes; use at most ${articleImages}.` : `There are no article images, so do not use "article" scenes.`}
 
 ${clipRules}
 
@@ -98,6 +102,8 @@ ${sentences.map((s) => `[${s.index}] ${s.start.toFixed(1)}-${s.end.toFixed(1)}: 
         sub: s.sub ?? undefined,
         query: s.query ?? undefined,
       };
+      // The model may still pick "article" against the rules; show an archive image instead.
+      if (s.type === "article" && !articleImages) return { ...scene, type: "broll" as const, text: "", query: scene.query ?? scene.text };
       if (s.type !== "clip") return scene;
       const clip = s.clip ? clipById.get(s.clip) : undefined;
       if (!clip) {

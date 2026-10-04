@@ -4,6 +4,7 @@ import { NewsVideo } from "./NewsVideo";
 import { Thumbnail, THUMB_HEIGHT, THUMB_WIDTH, type ThumbnailProps } from "./Thumbnail";
 import { ShortVideo, SHORT_HEIGHT, SHORT_WIDTH, type ShortVideoProps } from "./ShortVideo";
 import { BANNER, ChannelAvatar, ChannelBanner, type AvatarProps, type BannerProps } from "./ChannelArt";
+import { DocAvatar, DocBanner, type DocAvatarProps, type DocBannerProps } from "./DocumentaryArt";
 import { FPS, HEIGHT, WIDTH, totalSeconds, type NewsVideoProps } from "./types";
 
 const defaultProps: NewsVideoProps = {
@@ -74,6 +75,24 @@ export const RemotionRoot: React.FC = () => (
     height={BANNER.height}
     durationInFrames={1}
     defaultProps={{ channel: "My Channel", tagline: "AI news and hands-on builds", topics: ["AI News", "Tutorials"] } satisfies BannerProps}
+  />
+  <Composition
+    id="DocAvatar"
+    component={DocAvatar}
+    fps={1}
+    width={800}
+    height={800}
+    durationInFrames={1}
+    defaultProps={{ variant: "monogram", channel: "My Channel" } satisfies DocAvatarProps}
+  />
+  <Composition
+    id="DocBanner"
+    component={DocBanner}
+    fps={1}
+    width={BANNER.width}
+    height={BANNER.height}
+    durationInFrames={1}
+    defaultProps={{ channel: "My Channel", tagline: "The real stories behind the legends", topics: "Myths · Legends · The record" } satisfies DocBannerProps}
   />
   </>
 );

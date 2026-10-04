@@ -4,9 +4,11 @@ import type { NewsVideoProps } from "./types";
 import { Intro, Outro } from "./Bumpers";
 import { SceneView } from "./Scenes";
 import { Captions } from "./Captions";
-import { theme } from "./theme";
+import { resolveTheme, ThemeProvider, useTheme } from "./theme";
 
-const Branding: React.FC<{ channel: string; badge: string; source: string }> = ({ channel, badge, source }) => (
+const Branding: React.FC<{ channel: string; badge: string; source: string }> = ({ channel, badge, source }) => {
+  const theme = useTheme();
+  return (
   <div
     style={{
       position: "absolute",
@@ -35,10 +37,12 @@ const Branding: React.FC<{ channel: string; badge: string; source: string }> = (
     ) : null}
     {source ? <div style={{ fontSize: 22, color: "#ffffffcc" }}>via {source}</div> : null}
   </div>
-);
+  );
+};
 
 /** Progress through the narration (not the intro/outro). */
 const ProgressBar: React.FC<{ durationInFrames: number }> = ({ durationInFrames }) => {
+  const theme = useTheme();
   const frame = useCurrentFrame();
   return (
     <div
@@ -59,12 +63,15 @@ export const NewsVideo: React.FC<NewsVideoProps> = ({
   introSec = 0,
   leadInSec = 0,
   outroSec = 0,
+  theme: overrides,
 }) => {
+  const theme = resolveTheme(overrides);
   const { fps } = useVideoConfig();
   const introFrames = Math.round(introSec * fps);
   const leadFrames = Math.round(leadInSec * fps);
   const mainFrames = leadFrames + Math.max(1, Math.ceil(durationSec * fps));
   return (
+    <ThemeProvider value={theme}>
     <AbsoluteFill style={{ backgroundColor: theme.bg }}>
       {introFrames ? (
         <Sequence durationInFrames={introFrames} name="Intro">
@@ -90,6 +97,7 @@ export const NewsVideo: React.FC<NewsVideoProps> = ({
         </Sequence>
       ) : null}
     </AbsoluteFill>
+    </ThemeProvider>
   );
 };
 
@@ -100,6 +108,7 @@ const Main: React.FC<
     leadFrames: number;
   }
 > = ({ audioSrc, scenes, words, channel, badge, source, showCaptions, durationInFrames, leadFrames }) => {
+  const theme = useTheme();
   const { fps } = useVideoConfig();
   return (
     <AbsoluteFill style={{ backgroundColor: theme.bg }}>

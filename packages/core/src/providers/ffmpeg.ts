@@ -97,6 +97,24 @@ export async function extractFrame(input: string, atSec: number, output: string,
 }
 
 /**
+ * Scales a still image to fit inside `max` x `max` px as a JPEG (smaller images keep their size).
+ * Unlike extractFrame there is no -ss: on a still image it makes ffmpeg exit 0 without writing anything.
+ * Throws if no output was written.
+ */
+export async function resizeImage(input: string, output: string, max = 2560): Promise<void> {
+  fs.rmSync(output, { force: true });
+  await run("ffmpeg", [
+    "-y", "-v", "error",
+    "-i", input,
+    "-frames:v", "1",
+    "-vf", `scale='min(${max},iw)':'min(${max},ih)':force_original_aspect_ratio=decrease`,
+    "-q:v", "3",
+    output,
+  ]);
+  if (!fs.existsSync(output) || fs.statSync(output).size === 0) throw new Error(`ffmpeg wrote no image for ${path.basename(input)}`);
+}
+
+/**
  * Streams a video as small grayscale frames and calls `onFrame` for each one, without
  * holding the whole video in memory. Used for motion/activity analysis.
  */

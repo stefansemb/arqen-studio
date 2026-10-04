@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { NextResponse } from "next/server";
-import { listProjects } from "@yta/core/db";
+import { getProject, listProjects } from "@yta/core/db";
+import { getChannel } from "@yta/core/channels";
 import { projectDir } from "@yta/core/paths";
 import { readPublish } from "@yta/core/publishStore";
 import { saveAppSettings } from "@yta/core/settings";
@@ -24,6 +25,7 @@ export function GET() {
           title: publish.title,
           url: p.url,
           niche: p.niche,
+          channel: getChannel(p.channel_id).name,
           batchId: p.batch_id,
           durationMin: p.duration_min,
           createdAt: p.created_at,
@@ -49,12 +51,23 @@ export async function POST(req: Request) {
 
   const { privacy } = defaults;
   const schedule = privacy === "schedule";
-  const slots = schedule ? nextSlots(ids.length, defaults.scheduleTime, scheduledTimes()) : [];
-  const results = ids.map((id, i) => {
+  // One video per day per channel: each channel's videos fill that channel's free days.
+  const byChannel = new Map<string, string[]>();
+  for (const id of ids) {
+    const ch = getProject(id)?.channel_id ?? "default";
+    byChannel.set(ch, [...(byChannel.get(ch) ?? []), id]);
+  }
+  const slotOf = new Map<string, Date>();
+  if (schedule) {
+    for (const [ch, list] of byChannel) {
+      nextSlots(list.length, defaults.scheduleTime, scheduledTimes(ch)).forEach((d, i) => slotOf.set(list[i], d));
+    }
+  }
+  const results = ids.map((id) => {
     try {
       const upload = startUpload(id, {
         privacy: privacy === "schedule" ? "private" : privacy,
-        publishAt: schedule ? slots[i].toISOString() : undefined,
+        publishAt: schedule ? slotOf.get(id)?.toISOString() : undefined,
         notifySubscribers: defaults.notifySubscribers,
       });
       return { id, ok: true, publishAt: upload.publishAt };

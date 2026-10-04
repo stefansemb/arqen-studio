@@ -1,8 +1,9 @@
 import React from "react";
 import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
-import { theme } from "./theme";
+import { useTheme } from "./theme";
 
 const Glow: React.FC = () => {
+  const theme = useTheme();
   const frame = useCurrentFrame();
   return (
     <AbsoluteFill
@@ -14,7 +15,9 @@ const Glow: React.FC = () => {
   );
 };
 
-const Logo: React.FC<{ channel: string; scale?: number; progress: number }> = ({ channel, scale = 1, progress }) => (
+const Logo: React.FC<{ channel: string; scale?: number; progress: number }> = ({ channel, scale = 1, progress }) => {
+  const theme = useTheme();
+  return (
   <div style={{ display: "flex", alignItems: "center", gap: 28 * scale, fontFamily: theme.font }}>
     <div
       style={{
@@ -39,10 +42,12 @@ const Logo: React.FC<{ channel: string; scale?: number; progress: number }> = ({
       {channel}
     </div>
   </div>
-);
+  );
+};
 
 /** Short logo sting before the narration. */
 export const Intro: React.FC<{ channel: string; badge: string }> = ({ channel, badge }) => {
+  const theme = useTheme();
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const p = spring({ frame, fps, config: { damping: 14 } });
@@ -79,6 +84,7 @@ export const Intro: React.FC<{ channel: string; badge: string }> = ({ channel, b
  * subscribe and "watch next" elements added in YouTube Studio don't cover anything.
  */
 export const Outro: React.FC<{ channel: string }> = ({ channel }) => {
+  const theme = useTheme();
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const p = spring({ frame, fps, config: { damping: 16 } });

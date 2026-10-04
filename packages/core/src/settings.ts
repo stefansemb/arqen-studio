@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { DATA_DIR, projectDir } from "./paths";
+import { projectDir } from "./paths";
 import { defaultVoice, SPEED_RANGE, type VoiceChoice } from "./providers/tts";
 import { DEFAULT_ZOOM_SETTINGS, sanitizeZoomSettings, type ZoomSettings } from "./zoom";
 import { DEFAULT_FEEDS, type FeedSource } from "./news";
+import { channelDataDir, currentChannelId, DEFAULT_CHANNEL, projectChannelId } from "./channels";
 
 /** settings.json: per-project render options the user can change without re-running AI steps. */
 export interface ProjectSettings {
@@ -12,7 +13,7 @@ export interface ProjectSettings {
   voice?: VoiceChoice;
 }
 
-/** data/app-settings.json: channel-wide defaults. */
+/** app-settings.json in the channel's folder (data/ for the default channel): channel-wide defaults. */
 export interface AppSettings {
   voice: VoiceChoice;
   /** Appended to every generated video description (before the hashtags). */
@@ -83,6 +84,16 @@ export const DEFAULT_APP_SETTINGS: Omit<AppSettings, "voice"> = {
   pinnedComment: { enabled: true, subscribeUrl: "" },
 };
 
+/**
+ * Starting values for channels other than the default one: the default's texts are about AI news,
+ * so a new channel starts with neutral ones and no playlists.
+ */
+const NEW_CHANNEL_SETTINGS: Partial<Omit<AppSettings, "voice">> = {
+  descriptionFooter: "Made with AI-assisted scripting and an AI voice, and reviewed by a human before publishing.",
+  channel: { description: "", keywords: "", country: "" },
+  playlists: {},
+};
+
 function readJsonFile<T>(file: string): Partial<T> {
   return fs.existsSync(file) ? (JSON.parse(fs.readFileSync(file, "utf8")) as Partial<T>) : {};
 }
@@ -100,7 +111,7 @@ export function sanitizeVoice(input: unknown): VoiceChoice | undefined {
   };
 }
 
-const appSettingsFile = () => path.join(DATA_DIR, "app-settings.json");
+const appSettingsFile = (channelId: string) => path.join(channelDataDir(channelId), "app-settings.json");
 
 const str = (v: unknown, max: number, fallback: string) => (typeof v === "string" ? v.slice(0, max) : fallback);
 const bumper = (v: unknown, fallback: { enabled: boolean; seconds: number }, [lo, hi]: [number, number]) => {
@@ -160,8 +171,8 @@ function sanitizePinnedComment(v: unknown): AppSettings["pinnedComment"] {
 }
 
 /** Fills gaps with defaults and enforces YouTube's limits. */
-function sanitizeApp(raw: Partial<AppSettings>): AppSettings {
-  const d = DEFAULT_APP_SETTINGS;
+function sanitizeApp(raw: Partial<AppSettings>, channelId = DEFAULT_CHANNEL): AppSettings {
+  const d = channelId === DEFAULT_CHANNEL ? DEFAULT_APP_SETTINGS : { ...DEFAULT_APP_SETTINGS, ...NEW_CHANNEL_SETTINGS };
   const ch = (raw.channel ?? {}) as Partial<AppSettings["channel"]>;
   const playlists: Record<string, string> = { ...d.playlists };
   for (const [k, v] of Object.entries(raw.playlists ?? {})) if (typeof v === "string") playlists[k] = v.trim().slice(0, 150);
@@ -185,13 +196,14 @@ function sanitizeApp(raw: Partial<AppSettings>): AppSettings {
   };
 }
 
-export function readAppSettings(): AppSettings {
-  return sanitizeApp(readJsonFile<AppSettings>(appSettingsFile()));
+/** The settings of `channelId`, by default the current channel (see channels.ts). */
+export function readAppSettings(channelId = currentChannelId()): AppSettings {
+  return sanitizeApp(readJsonFile<AppSettings>(appSettingsFile(channelId)), channelId);
 }
 
-export function saveAppSettings(patch: Partial<Record<keyof AppSettings, unknown>>): AppSettings {
+export function saveAppSettings(patch: Partial<Record<keyof AppSettings, unknown>>, channelId = currentChannelId()): AppSettings {
   if (patch.voice !== undefined && !sanitizeVoice(patch.voice)) throw new Error("Invalid voice");
-  const current = readAppSettings();
+  const current = readAppSettings(channelId);
   const merged = { ...current } as Record<string, unknown>;
   for (const [k, v] of Object.entries(patch)) {
     if (v === undefined) continue;
@@ -199,9 +211,9 @@ export function saveAppSettings(patch: Partial<Record<keyof AppSettings, unknown
     const cur = merged[k];
     merged[k] = v && typeof v === "object" && !Array.isArray(v) && cur && typeof cur === "object" ? { ...cur, ...v } : v;
   }
-  const next = sanitizeApp(merged as Partial<AppSettings>);
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(appSettingsFile(), JSON.stringify(next, null, 2));
+  const next = sanitizeApp(merged as Partial<AppSettings>, channelId);
+  fs.mkdirSync(channelDataDir(channelId), { recursive: true });
+  fs.writeFileSync(appSettingsFile(channelId), JSON.stringify(next, null, 2));
   return next;
 }
 
@@ -228,7 +240,7 @@ export function saveSettings(projectId: string, patch: { zoom?: Partial<ZoomSett
   return next;
 }
 
-/** The voice a project will be narrated with: its own choice, else the app default. */
+/** The voice a project will be narrated with: its own choice, else its channel's default. */
 export function resolveVoice(projectId: string): VoiceChoice {
-  return readSettings(projectId).voice ?? readAppSettings().voice;
+  return readSettings(projectId).voice ?? readAppSettings(projectChannelId(projectId)).voice;
 }

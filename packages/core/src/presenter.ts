@@ -1,13 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
-import { DATA_DIR } from "./paths";
+import { channelDataDir, getChannel } from "./channels";
 
 /**
- * Cut-out photos of the channel's presenter, one transparent PNG per gesture
- * (data/channel/presenter/surprised.png, pointing.png, ...). When the folder has images,
- * thumbnails show the presenter on the right; otherwise they look as before.
+ * Cut-out photos of the current channel's presenter, one transparent PNG per gesture
+ * (data/channel/presenter/surprised.png, pointing.png, ... for the default channel). When the
+ * folder has images and the channel profile allows it, thumbnails show the presenter on the right.
  */
-export const PRESENTER_DIR = path.join(DATA_DIR, "channel", "presenter");
+export const presenterDir = () => path.join(channelDataDir(), "channel", "presenter");
 
 /** The presenter stands on the right, so gestures towards the right point away from the text. */
 const FACING_AWAY = new Set(["presenting-right"]);
@@ -18,8 +18,12 @@ const FACING_AWAY = new Set(["presenting-right"]);
  */
 const FALLBACK = ["thinking", "pointing", "presenting-left", "holding-up", "two-hands", "comparing", "thumbs-up", "surprised"];
 
-/** Gesture names available for thumbnails (file names without .png). */
-export function listGestures(dir = PRESENTER_DIR): string[] {
+/** Gesture names available for thumbnails (file names without .png); none when the channel has the presenter off. */
+export function listGestures(dir?: string): string[] {
+  if (dir === undefined) {
+    if (!getChannel().presenter) return [];
+    dir = presenterDir();
+  }
   if (!fs.existsSync(dir)) return [];
   return fs
     .readdirSync(dir)
@@ -41,4 +45,4 @@ export function pickGesture(wanted: string | undefined, index: number, available
   return ordered[index % ordered.length];
 }
 
-export const presenterFile = (gesture: string, dir = PRESENTER_DIR) => path.join(dir, `${gesture}.png`);
+export const presenterFile = (gesture: string, dir = presenterDir()) => path.join(dir, `${gesture}.png`);

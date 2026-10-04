@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { renderStill, selectComposition } from "@remotion/renderer";
 import type { ThumbnailProps } from "@yta/video";
 import { readJson, writeJson, type StepContext } from "../context";
-import { CHANNEL_NAME } from "../paths";
+import { channelName, getChannel } from "../channels";
 import { extractFrame } from "../providers/ffmpeg";
 import type { ThumbnailVariant } from "../publish";
 import { getTemplate } from "../templates";
@@ -13,6 +13,7 @@ import type { ClipInfo, PlannedScene } from "../types";
 import { readPublish } from "../publishStore";
 import { getBundle, serveDir } from "./render";
 import { listGestures, pickGesture, presenterFile } from "../presenter";
+import { SOURCE_NAMES, STOCK_SOURCES } from "../providers/images";
 
 const VARIANTS = 3;
 
@@ -38,7 +39,14 @@ async function pickBackgrounds(ctx: StepContext): Promise<string[]> {
     out.push(rel);
   }
 
-  const imageScenes = [...scenes.filter((s) => s.type === "article"), ...scenes.filter((s) => s.type !== "article")];
+  // Archive-first channels lead with paintings and portraits; a stock photo is a weaker hook for a history video.
+  const archiveFirst = !STOCK_SOURCES.includes(getChannel().imageSources[0]);
+  const isStock = (s: PlannedScene) => !s.source || STOCK_SOURCES.some((src) => SOURCE_NAMES[src] === s.source);
+  const rest = scenes.filter((s) => s.type !== "article");
+  const imageScenes = [
+    ...scenes.filter((s) => s.type === "article"),
+    ...(archiveFirst ? [...rest.filter((s) => !isStock(s)), ...rest.filter(isStock)] : rest),
+  ];
   for (const s of imageScenes) {
     if (out.length >= VARIANTS) break;
     if (s.asset && !out.includes(s.asset)) out.push(s.asset);
@@ -81,9 +89,10 @@ export async function renderThumbnails(ctx: StepContext): Promise<void> {
         highlightBox: readAppSettings().thumbnailBox,
         image: background ? `http://127.0.0.1:${port}/${background}` : undefined,
         presenter: presenter ? `http://127.0.0.1:${port}/${presenter}` : undefined,
-        channel: CHANNEL_NAME,
+        channel: channelName(),
         badge,
         layout,
+        theme: getChannel().theme,
       };
       const composition = await selectComposition({ serveUrl, id: "Thumbnail", inputProps });
       const file = `thumbs/thumb-${i}.jpg`;

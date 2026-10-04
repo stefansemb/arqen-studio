@@ -5,6 +5,7 @@ import { projectDir } from "./paths";
 import { saveSettings } from "./settings";
 import { getTemplate } from "./templates";
 import { countWords } from "./timing";
+import { checkNewProject } from "./channels";
 import type { Article, Script } from "./types";
 
 /** Wraps plain narration text (paragraphs separated by blank lines) in the script.json shape. */
@@ -74,12 +75,14 @@ export function createNotesProject(input: {
   start?: "queue" | "draft" | "none";
   /** Voice for this project; saved before the job is queued. */
   voice?: unknown;
+  /** Channel profile; default: the default channel. */
+  channelId?: string;
 }): ProjectRow {
   const notes = input.notes.replace(/\r\n/g, "\n").trim();
   if (countWords(notes) < 3) throw new Error("Write a few notes first.");
   const niche = input.niche ?? "tutorial";
   getTemplate(niche);
-  if (!(input.durationMin >= 0.5 && input.durationMin <= 30)) throw new Error("Duration must be 0.5-30 minutes.");
+  const channelId = checkNewProject(input.channelId, niche, input.durationMin);
   const title = input.title?.trim() || "";
   const start = input.start ?? "queue";
   const project = createProject({
@@ -89,6 +92,7 @@ export function createNotesProject(input: {
     sourceType: "notes",
     title: title || notes.split(/\s+/).slice(0, 8).join(" ") + "...",
     status: start === "draft" ? "draft" : "queued",
+    channelId,
   });
   const article: Article = { url: "", title, siteName: "", byline: null, text: notes, images: [] };
   fs.writeFileSync(path.join(projectDir(project.id), "article.json"), JSON.stringify(article, null, 2));
@@ -112,12 +116,16 @@ export function createScriptProject(input: {
   start?: "queue" | "draft" | "none";
   /** Voice for this project; saved before the job is queued. */
   voice?: unknown;
+  /** Channel profile; default: the default channel. */
+  channelId?: string;
 }): ProjectRow {
   const text = input.script.replace(/\r\n/g, "\n").trim();
   if (countWords(text) < 5) throw new Error("The script is too short.");
   const niche = input.niche ?? "ai-news";
   const title = input.title?.trim() || text.split(/\s+/).slice(0, 8).join(" ").replace(/[.,;:!?]+$/, "") + "...";
   const durationMin = Math.round((countWords(text) / getTemplate(niche).wordsPerMinute) * 10) / 10;
+  // A finished script sets its own length, so only the channel and template are checked.
+  const channelId = checkNewProject(input.channelId, niche);
 
   const start = input.start ?? "queue";
   const project = createProject({
@@ -127,6 +135,7 @@ export function createScriptProject(input: {
     sourceType: "script",
     title,
     status: start === "draft" ? "draft" : "queued",
+    channelId,
   });
   const dir = projectDir(project.id);
 

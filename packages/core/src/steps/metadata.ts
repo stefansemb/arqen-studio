@@ -4,7 +4,8 @@ import path from "node:path";
 import { z } from "zod";
 import { generateStructured } from "../llm";
 import { readJson, writeJson, type StepContext } from "../context";
-import { CHANNEL_NAME } from "../paths";
+import { channelName } from "../channels";
+import { SOURCE_NAMES } from "../providers/images";
 import { buildChapters, composeDescription, fitTags, YT, type PublishInfo } from "../publish";
 import { getTemplate } from "../templates";
 import { readAppSettings } from "../settings";
@@ -32,6 +33,14 @@ const MetadataSchema = z.object({
     .describe("Opening of the channel's pinned comment: 1-2 short sentences ending in a specific question viewers want to answer; no links, no hashtags"),
 });
 
+const STOCK_SITES = [SOURCE_NAMES.pexels, SOURCE_NAMES.pixabay];
+
+/** Pinned comment and thumbnail guidance for templates without their own (the AI news ones). */
+const DEFAULT_PACKAGING = `Pinned comment: a concrete opinion question about this story (e.g. "Would you trust Gemini 4 with your codebase?"), not "What do you think?".
+Thumbnail text: 2-5 punchy words that ADD to the title rather than repeat it; highlight the single most important word.
+Start every thumbnail text with the recognizable subject people search for (product, model, company or person, e.g. "Gemini 4 Locked Away",
+"OpenAI Hits Pause"; for a roundup, the biggest story's subject), so a viewer scrolling past knows the topic at a glance. Only state what the video supports.`;
+
 function readRoundupSources(dir: string): { title: string; url: string }[] {
   const p = path.join(dir, "articles.json");
   return fs.existsSync(p) ? (JSON.parse(fs.readFileSync(p, "utf8")) as Article[]).map((a) => ({ title: a.title, url: a.url })) : [];
@@ -42,6 +51,7 @@ export async function generateMetadata(ctx: StepContext): Promise<void> {
   const timings = readJson<Timings>(ctx, "timings.json");
   const article = readJson<Article>(ctx, "article.json");
   const template = getTemplate(ctx.project.niche);
+  const channel = channelName();
   const scenesFile = path.join(ctx.dir, "scenes.json");
   const scenes = fs.existsSync(scenesFile) ? (JSON.parse(fs.readFileSync(scenesFile, "utf8")) as PlannedScene[]) : [];
   const gestures = listGestures();
@@ -50,14 +60,11 @@ export async function generateMetadata(ctx: StepContext): Promise<void> {
   const m = await generateStructured({
     schema: MetadataSchema,
     effort: "medium",
-    system: `You write YouTube packaging for ${CHANNEL_NAME ? `the channel "${CHANNEL_NAME}"` : "a YouTube channel"} (${template.label} videos).
+    system: `You write YouTube packaging for ${channel ? `the channel "${channel}"` : "a YouTube channel"} (${template.label} videos).
 Titles: under ${YT.titleIdeal} characters, specific and curiosity-driven, front-load the most interesting words. Never promise
 anything the video does not deliver, no ALL CAPS titles, at most one emoji. Vary the angle across options (outcome, question, number, contrarian, how-to).
 Description summary: first sentence works as a search snippet; plain language; no "In this video".
-Pinned comment: a concrete opinion question about this story (e.g. "Would you trust Gemini 4 with your codebase?"), not "What do you think?".
-Thumbnail text: 2-5 punchy words that ADD to the title rather than repeat it; highlight the single most important word.
-Start every thumbnail text with the recognizable subject people search for (product, model, company or person, e.g. "Gemini 4 Locked Away",
-"OpenAI Hits Pause"; for a roundup, the biggest story's subject), so a viewer scrolling past knows the topic at a glance. Only state what the video supports.${
+${template.packaging ?? DEFAULT_PACKAGING}${
       gestures.length
         ? `\nThumbnail gesture: the presenter stands on the right, next to the text. The FIRST option is the one used, and its gesture should be thinking unless another gesture clearly fits better: thinking suits most news, analysis, AI safety and legal twists.
 Use pointing or presenting-left to show off a new product or feature. Use surprised only for truly shocking, once-in-a-while news, never as a default and never on the first option for ordinary news.
@@ -82,6 +89,8 @@ ${script.hook ? `Hook: ${script.hook}\n` : ""}${script.cta ? `CTA: ${script.cta}
   const hashtags = m.hashtags.slice(0, 3).map((h) => h.replace(/^#/, "").replace(/\s+/g, ""));
   const titles = m.titles.map((t) => t.trim()).filter(Boolean).slice(0, 5);
   const previous = readPublish(ctx.dir);
+  // Image sources in order of first use (older scenes.json files have no source field).
+  const usedSources = [...new Set(scenes.map((sc) => sc.source).filter((n): n is string => Boolean(n)))];
   const info: PublishInfo = {
     titles,
     title: titles[0] ?? script.title,
@@ -92,6 +101,8 @@ ${script.hook ? `Hook: ${script.hook}\n` : ""}${script.cta ? `CTA: ${script.cta}
       sourceName: article.siteName || undefined,
       sources: ctx.project.source_type === "roundup" ? readRoundupSources(ctx.dir) : undefined,
       stockCredit: scenes.some((s) => s.credit?.includes("Pexels")),
+      stockSources: usedSources.filter((n) => STOCK_SITES.includes(n)),
+      archiveSources: usedSources.filter((n) => !STOCK_SITES.includes(n)),
       footer: app.descriptionFooter,
       hashtags,
     }),

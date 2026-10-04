@@ -1,5 +1,6 @@
 import { addEvent, getProject, updateProject } from "./db";
 import { projectDir } from "./paths";
+import { withChannel } from "./channels";
 import type { StepContext } from "./context";
 import { DEFAULT_LAST_STEP, isSkipped, STEP_NAMES, STEP_LABELS, type StepName } from "./steps/names";
 import { fetchArticle } from "./steps/fetch";
@@ -37,10 +38,17 @@ export interface RunOptions {
   echo?: boolean;
 }
 
-/** Runs pipeline steps in order. Each step reads the previous steps' files, so any step can be re-run. */
+/**
+ * Runs pipeline steps in order. Each step reads the previous steps' files, so any step can be re-run.
+ * Steps run as the project's channel, so its settings, look and YouTube sign-in apply.
+ */
 export async function runPipeline(projectId: string, opts: RunOptions = {}): Promise<boolean> {
   const project = getProject(projectId);
   if (!project) throw new Error(`Project ${projectId} not found`);
+  return withChannel(project.channel_id, () => runSteps(projectId, project, opts));
+}
+
+async function runSteps(projectId: string, project: NonNullable<ReturnType<typeof getProject>>, opts: RunOptions): Promise<boolean> {
   const first = STEP_NAMES.indexOf(opts.from ?? "fetch");
   const last = STEP_NAMES.indexOf(opts.to ?? DEFAULT_LAST_STEP);
   const dir = projectDir(projectId);

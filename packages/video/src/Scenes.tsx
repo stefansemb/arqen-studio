@@ -1,11 +1,12 @@
 import React from "react";
 import { AbsoluteFill, Freeze, Img, interpolate, OffthreadVideo, useCurrentFrame, useVideoConfig } from "remotion";
 import type { VideoScene } from "./types";
-import { theme } from "./theme";
+import { useTheme } from "./theme";
 import { cameraAt } from "./camera";
 
 /** Slow zoom/pan so still images feel alive. Direction alternates per scene. */
 const KenBurns: React.FC<{ src: string; index: number; blur?: boolean }> = ({ src, index, blur }) => {
+  const theme = useTheme();
   const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
   const p = frame / Math.max(1, durationInFrames);
@@ -29,6 +30,7 @@ const KenBurns: React.FC<{ src: string; index: number; blur?: boolean }> = ({ sr
 };
 
 const Backdrop: React.FC<{ index: number }> = ({ index }) => {
+  const theme = useTheme();
   const frame = useCurrentFrame();
   const angle = (index * 47 + frame * 0.15) % 360;
   return (
@@ -36,7 +38,7 @@ const Backdrop: React.FC<{ index: number }> = ({ index }) => {
       style={{
         background: `radial-gradient(circle at 30% 20%, ${theme.accent}33, transparent 55%),
                      radial-gradient(circle at 80% 80%, ${theme.accent2}22, transparent 50%),
-                     linear-gradient(${angle}deg, #0b0b10, #16121f)`,
+                     linear-gradient(${angle}deg, ${theme.bg}, ${theme.bg2})`,
       }}
     />
   );
@@ -49,18 +51,21 @@ const FadeIn: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return <div style={{ opacity, transform: `translateY(${y}px)` }}>{children}</div>;
 };
 
-const Credit: React.FC<{ credit?: string }> = ({ credit }) =>
-  credit ? (
+const Credit: React.FC<{ credit?: string }> = ({ credit }) => {
+  const theme = useTheme();
+  return credit ? (
     <div style={{ position: "absolute", right: 32, bottom: 20, fontSize: 18, color: "#ffffff88", fontFamily: theme.font }}>
       {credit}
     </div>
   ) : null;
+};
 
 // The recording sits in a 16:9 "screen" between the logo and the captions, so neither covers it.
 const SCREEN = { width: 1440, height: 810, top: 96 };
 
 /** A user screen recording, sped up to fit the scene or frozen on its last frame when it runs out. */
 const ClipScene: React.FC<{ scene: VideoScene; index: number }> = ({ scene, index }) => {
+  const theme = useTheme();
   const { fps } = useVideoConfig();
   const frame = useCurrentFrame();
   const v = scene.video;
@@ -131,6 +136,7 @@ const ClipScene: React.FC<{ scene: VideoScene; index: number }> = ({ scene, inde
 };
 
 export const SceneView: React.FC<{ scene: VideoScene; index: number }> = ({ scene, index }) => {
+  const theme = useTheme();
   const bg = scene.image ? (
     <KenBurns src={scene.image} index={index} blur={scene.type !== "broll"} />
   ) : (

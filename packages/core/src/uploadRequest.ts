@@ -4,6 +4,8 @@ import { enqueueJob, getProject, listProjects } from "./db";
 import { projectDir } from "./paths";
 import { readPublish } from "./publishStore";
 import { CATEGORIES, connectionStatus, type UploadOptions } from "./youtube";
+import { withChannel } from "./channels";
+import { TEMPLATES } from "./templates";
 
 export class UploadRequestError extends Error {
   constructor(
@@ -31,7 +33,8 @@ export function startUpload(
   const publish = readPublish(dir);
   if (!publish) throw new UploadRequestError("Create the title and description first.");
   if (!fs.existsSync(path.join(dir, "output.mp4"))) throw new UploadRequestError("Render the video first.");
-  if (!connectionStatus().connected) throw new UploadRequestError("Connect YouTube first.");
+  // Each channel has its own sign-in; check the one this project uploads to.
+  if (!withChannel(project.channel_id, () => connectionStatus().connected)) throw new UploadRequestError("Connect YouTube first.");
   if (publish.youtube && !body.confirmDuplicate) {
     throw new UploadRequestError(`Already uploaded: ${publish.youtube.url}`, 409, true);
   }
@@ -49,7 +52,7 @@ export function startUpload(
   const upload: UploadOptions = {
     privacy: body.privacy as UploadOptions["privacy"],
     publishAt,
-    categoryId: body.categoryId && CATEGORIES[body.categoryId] ? body.categoryId : project.niche === "tutorial" ? "27" : "28",
+    categoryId: body.categoryId && CATEGORIES[body.categoryId] ? body.categoryId : (TEMPLATES[project.niche]?.categoryId ?? "28"),
     notifySubscribers: body.notifySubscribers !== false,
     syntheticMedia: Boolean(body.syntheticMedia),
   };
@@ -58,10 +61,11 @@ export function startUpload(
   return upload;
 }
 
-/** Publish times already taken by scheduled uploads (queued or done). */
-export function scheduledTimes(): Date[] {
+/** Publish times already taken by scheduled uploads (queued or done) on one channel. */
+export function scheduledTimes(channelId: string): Date[] {
   const out: Date[] = [];
   for (const p of listProjects()) {
+    if (p.channel_id !== channelId) continue;
     const publish = readPublish(projectDir(p.id));
     const at = publish?.youtube?.publishAt ?? publish?.upload?.publishAt;
     if (at) out.push(new Date(at));

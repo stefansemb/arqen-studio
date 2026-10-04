@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { PublishInfo } from "@yta/core/publish";
+import { TEMPLATES } from "@yta/core/templates";
 
 interface Status {
   configured: boolean;
@@ -31,6 +32,8 @@ function defaultSchedule(): string {
 export function YouTubePanel(props: {
   projectId: string;
   niche: string;
+  /** Channel profile whose YouTube sign-in uploads this project. */
+  channel: string;
   publish: PublishInfo;
   hasOutput: boolean;
   busy: boolean;
@@ -40,7 +43,7 @@ export function YouTubePanel(props: {
   const [status, setStatus] = useState<Status | null>(null);
   const [visibility, setVisibility] = useState<"private" | "unlisted" | "public" | "schedule">(props.publish.upload?.privacy ?? "private");
   const [when, setWhen] = useState(defaultSchedule);
-  const [category, setCategory] = useState(props.publish.upload?.categoryId ?? (props.niche === "tutorial" ? "27" : "28"));
+  const [category, setCategory] = useState(props.publish.upload?.categoryId ?? TEMPLATES[props.niche]?.categoryId ?? "28");
   const [notify, setNotify] = useState(props.publish.upload?.notifySubscribers ?? true);
   const [synthetic, setSynthetic] = useState(props.publish.upload?.syntheticMedia ?? false);
   const [message, setMessage] = useState<{ error: boolean; text: string } | null>(null);
@@ -52,7 +55,7 @@ export function YouTubePanel(props: {
   const [commentMsg, setCommentMsg] = useState<{ error: boolean; text: string } | null>(null);
 
   const loadStatus = () =>
-    fetch("/api/youtube/status")
+    fetch(`/api/youtube/status?channel=${encodeURIComponent(props.channel)}`)
       .then((r) => r.json())
       .then(setStatus)
       .catch(() => {});
@@ -129,7 +132,7 @@ export function YouTubePanel(props: {
 
   async function disconnect() {
     setConfirming(null);
-    await fetch("/api/youtube/disconnect", { method: "POST" });
+    await fetch(`/api/youtube/disconnect?channel=${encodeURIComponent(props.channel)}`, { method: "POST" });
     void loadStatus();
   }
 
@@ -228,7 +231,7 @@ export function YouTubePanel(props: {
         </div>
       ) : !status.connected ? (
         <div className="row">
-          <a className="btn" href={`/api/youtube/connect?return=/projects/${props.projectId}`}>
+          <a className="btn" href={`/api/youtube/connect?channel=${encodeURIComponent(props.channel)}&return=/projects/${props.projectId}`}>
             Connect YouTube
           </a>
           <span className="muted" style={{ fontSize: 12 }}>

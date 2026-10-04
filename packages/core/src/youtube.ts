@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { DATA_DIR } from "./paths";
+import { channelDataDir, currentChannelId, listChannels } from "./channels";
 import type { PublishInfo } from "./publish";
 
 /**
@@ -58,14 +58,22 @@ interface StoredToken {
   channel?: { id: string; title: string };
 }
 
-const tokenFile = () => path.join(DATA_DIR, "youtube-token.json");
+/** Each channel has its own sign-in: data/youtube-token.json for the default one (see channels.ts). */
+const tokenFile = (channelId = currentChannelId()) => path.join(channelDataDir(channelId), "youtube-token.json");
 
-function readToken(): StoredToken | null {
-  return fs.existsSync(tokenFile()) ? (JSON.parse(fs.readFileSync(tokenFile(), "utf8")) as StoredToken) : null;
+function readToken(channelId = currentChannelId()): StoredToken | null {
+  const file = tokenFile(channelId);
+  return fs.existsSync(file) ? (JSON.parse(fs.readFileSync(file, "utf8")) as StoredToken) : null;
+}
+
+/** The app profile whose sign-in already points at YouTube channel `youtubeId`, other than the current one. */
+function profileUsing(youtubeId: string): string | undefined {
+  const me = currentChannelId();
+  return listChannels().find((c) => c.id !== me && readToken(c.id)?.channel?.id === youtubeId)?.name;
 }
 
 function writeToken(t: StoredToken) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.mkdirSync(path.dirname(tokenFile()), { recursive: true });
   fs.writeFileSync(tokenFile(), JSON.stringify(t, null, 2));
 }
 
@@ -152,6 +160,13 @@ export async function exchangeCode(code: string): Promise<{ id: string; title: s
     scope: t.scope,
   };
   stored.channel = await fetchChannel(stored.access_token);
+  // Signing in with the wrong account would send this channel's videos to another channel.
+  const other = stored.channel && profileUsing(stored.channel.id);
+  if (other) {
+    throw new YouTubeError(
+      `"${stored.channel!.title}" is already connected to the profile "${other}". Sign in with the Google account (or brand account) that owns this channel instead.`,
+    );
+  }
   writeToken(stored);
   return stored.channel;
 }

@@ -61,7 +61,7 @@ export default function ProjectPage() {
   const [drafts, setDrafts] = useState<Record<number, SceneEdit>>({});
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
-  const defaultVoice = useDefaultVoice();
+  const defaultVoice = useDefaultVoice(d?.project.channel_id);
   const [voiceChanged, setVoiceChanged] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
 
@@ -299,6 +299,7 @@ export default function ProjectPage() {
           {tab === "script" ? (
             <section className="panel stack">
               <VoicePicker
+                channel={project.channel_id}
                 value={d.settings.voice ?? defaultVoice}
                 onChange={changeVoice}
                 sampleText={d.script ? [d.script.hook, ...d.script.segments.map((s) => s.text)].filter(Boolean).join(" ").slice(0, 250) : ""}
@@ -374,6 +375,7 @@ export default function ProjectPage() {
                 busy={busy}
                 version={project.updated_at}
                 niche={project.niche}
+                channel={project.channel_id ?? "default"}
                 hasOutput={Boolean(d.output)}
                 uploading={busy && project.current_step === "upload"}
                 onChanged={load}

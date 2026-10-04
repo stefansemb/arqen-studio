@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
 import type { CaptionWord } from "./types";
-import { theme } from "./theme";
+import { useTheme } from "./theme";
 
 const MAX_WORDS = 7;
 
@@ -22,6 +22,7 @@ export function chunkWords(words: CaptionWord[], maxWords = MAX_WORDS): CaptionW
 
 /** "short": vertical-video style, a few huge words at a time in the lower middle. */
 export const Captions: React.FC<{ words: CaptionWord[]; variant?: "wide" | "short" }> = ({ words, variant = "wide" }) => {
+  const theme = useTheme();
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = frame / fps;

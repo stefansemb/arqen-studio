@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { readShorts, uploadShort } from "@yta/core/shorts";
 import { connectionStatus } from "@yta/core/youtube";
+import { withProjectChannel } from "@yta/core/channels";
 
 export const maxDuration = 300;
 
@@ -14,7 +15,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     notifySubscribers?: boolean;
     confirmDuplicate?: boolean;
   };
-  if (!connectionStatus().connected) return NextResponse.json({ error: "Connect YouTube first." }, { status: 400 });
+  if (!withProjectChannel(id, () => connectionStatus().connected)) return NextResponse.json({ error: "Connect YouTube first." }, { status: 400 });
   const short = readShorts(id).find((s) => s.id === body.shortId);
   if (!short) return NextResponse.json({ error: "Short not found." }, { status: 404 });
   if (short.youtube && !body.confirmDuplicate) {

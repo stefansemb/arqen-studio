@@ -55,6 +55,8 @@ export function PublishPanel(props: {
   onChanged: () => void;
   onGenerate: () => void;
   niche: string;
+  /** Channel profile the project belongs to; its YouTube sign-in is used. */
+  channel: string;
   hasOutput: boolean;
   uploading: boolean;
 }) {
@@ -325,6 +327,7 @@ export function PublishPanel(props: {
       <YouTubePanel
         projectId={props.projectId}
         niche={props.niche}
+        channel={props.channel}
         publish={p}
         hasOutput={props.hasOutput}
         busy={props.busy || dirty}

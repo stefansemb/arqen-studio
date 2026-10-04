@@ -92,7 +92,10 @@ export async function fetchArticleFrom(url: string): Promise<Article> {
   return {
     url: res.url,
     title: parsed.title || doc.title,
-    siteName: parsed.siteName || meta('meta[property="og:site_name"]') || new URL(res.url).hostname.replace(/^www\./, ""),
+    // Wikipedia reports its publisher ("Wikimedia Foundation, Inc.") as the site name.
+    siteName: /(^|\.)wikipedia\.org$/.test(new URL(res.url).hostname)
+      ? "Wikipedia"
+      : parsed.siteName || meta('meta[property="og:site_name"]') || new URL(res.url).hostname.replace(/^www\./, ""),
     byline: parsed.byline ?? null,
     text: parsed.textContent.replace(/\n{3,}/g, "\n\n").trim(),
     images: images.slice(0, 8),

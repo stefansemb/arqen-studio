@@ -1,6 +1,6 @@
 import React from "react";
 import { AbsoluteFill, Img } from "remotion";
-import { theme } from "./theme";
+import { resolveTheme, type ThemeOverrides } from "./theme";
 
 export interface ThumbnailProps {
   [key: string]: unknown;
@@ -18,6 +18,8 @@ export interface ThumbnailProps {
   badge: string;
   /** Background placement: "right" leaves the left side for text, "full" fills everything. */
   layout: "right" | "full";
+  /** Channel colors and font; the default purple/cyan look when absent. */
+  theme?: ThemeOverrides;
 }
 
 export const THUMB_WIDTH = 1280;
@@ -34,7 +36,8 @@ function lines(text: string, max = 12): string[] {
   return out.slice(0, 4);
 }
 
-export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlightBox, image, presenter, channel, badge, layout }) => {
+export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlightBox, image, presenter, channel, badge, layout, theme: overrides }) => {
+  const theme = resolveTheme(overrides);
   const rows = lines(text);
   const longest = Math.max(...rows.map((r) => r.length), 1);
   // The presenter takes the right side, so the text column is a little narrower.
@@ -44,7 +47,7 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlight
   const hl = highlight?.toUpperCase().replace(/[^\p{L}\p{N}$%]/gu, "");
 
   // Background photos come from articles and stock sites in every colour imaginable. They are
-  // turned grey and re-tinted in the channel's purple/cyan so every thumbnail shares one palette.
+  // turned grey and re-tinted in the channel's accent colors so every thumbnail shares one palette.
   const imageBox: React.CSSProperties =
     layout === "full"
       ? { position: "absolute", inset: 0 }
@@ -67,7 +70,7 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlight
             style={{
               position: "absolute",
               inset: 0,
-              background: `linear-gradient(150deg, ${theme.accent} 0%, #3b1d8f 55%, ${theme.accent2} 110%)`,
+              background: `linear-gradient(150deg, ${theme.accent} 0%, ${theme.accentDeep} 55%, ${theme.accent2} 110%)`,
               mixBlendMode: "color",
             }}
           />

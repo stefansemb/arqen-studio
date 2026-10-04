@@ -1,4 +1,5 @@
 import type { CameraKey } from "./camera";
+import type { ThemeOverrides } from "./theme";
 
 export type SceneType = "broll" | "title" | "quote" | "stat" | "article" | "clip";
 
@@ -51,6 +52,8 @@ export interface NewsVideoProps {
   leadInSec?: number;
   /** Seconds of end screen after the narration (0 = none). */
   outroSec?: number;
+  /** Channel colors and font; the default purple/cyan look when absent. */
+  theme?: ThemeOverrides;
 }
 
 /** Full video length: intro + narration + outro. */

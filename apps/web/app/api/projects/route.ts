@@ -6,6 +6,7 @@ import { projectDir } from "@yta/core/paths";
 import type { PublishInfo } from "@yta/core/publish";
 import { createNotesProject, createScriptProject } from "@yta/core/fromScript";
 import { saveSettings } from "@yta/core/settings";
+import { checkNewProject, listChannels } from "@yta/core/channels";
 
 export const dynamic = "force-dynamic";
 
@@ -20,11 +21,23 @@ function uploadInfo(id: string): { youtubeTitle: string; youtubeUrl: string } | 
 }
 
 export function GET() {
-  return NextResponse.json(listProjects().map((p) => ({ ...p, ...uploadInfo(p.id) })));
+  const names = new Map(listChannels().map((c) => [c.id, c.name]));
+  return NextResponse.json(listProjects().map((p) => ({ ...p, channelName: names.get(p.channel_id) ?? p.channel_id, ...uploadInfo(p.id) })));
 }
 
 export async function POST(req: Request) {
-  const body = (await req.json()) as { url?: string; durationMin?: number; niche?: string; script?: string; title?: string; draft?: boolean; notes?: string; review?: boolean; voice?: unknown };
+  const body = (await req.json()) as {
+    url?: string;
+    durationMin?: number;
+    niche?: string;
+    script?: string;
+    title?: string;
+    draft?: boolean;
+    notes?: string;
+    review?: boolean;
+    voice?: unknown;
+    channelId?: string;
+  };
 
   if (body.notes !== undefined) {
     try {
@@ -36,6 +49,7 @@ export async function POST(req: Request) {
         review: body.review,
         voice: body.voice,
         start: body.draft ? "draft" : "queue",
+        channelId: body.channelId,
       });
       return NextResponse.json(project, { status: 201 });
     } catch (err) {
@@ -51,6 +65,7 @@ export async function POST(req: Request) {
         niche: body.niche,
         voice: body.voice,
         start: body.draft ? "draft" : "queue",
+        channelId: body.channelId,
       });
       return NextResponse.json(project, { status: 201 });
     } catch (err) {
@@ -66,10 +81,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Enter a valid http(s) URL." }, { status: 400 });
   }
   const durationMin = Number(body.durationMin ?? 4);
-  if (!(durationMin >= 1 && durationMin <= 30)) {
-    return NextResponse.json({ error: "Duration must be 1-30 minutes." }, { status: 400 });
+  const niche = body.niche ?? "ai-news";
+  let channelId: string;
+  try {
+    if (!(durationMin >= 1)) throw new Error("Duration must be at least 1 minute.");
+    channelId = checkNewProject(body.channelId, niche, durationMin);
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error).message }, { status: 400 });
   }
-  const project = createProject({ url: url.href, niche: body.niche ?? "ai-news", durationMin });
+  const project = createProject({ url: url.href, niche, durationMin, channelId });
   if (body.voice) {
     try {
       saveSettings(project.id, { voice: body.voice });
@@ -77,6 +97,7 @@ export async function POST(req: Request) {
       // An invalid voice falls back to the default rather than blocking the video.
     }
   }
-  enqueueJob(project.id, "fetch");
+  // With review, the run stops after the fact check so the script can be edited before paying for the voiceover.
+  enqueueJob(project.id, "fetch", body.review ? "scriptCheck" : undefined);
   return NextResponse.json(project, { status: 201 });
 }

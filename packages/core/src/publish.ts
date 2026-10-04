@@ -108,6 +108,10 @@ export function composeDescription(parts: {
   /** Several sources (roundups); listed one per line. */
   sources?: { title: string; url: string }[];
   stockCredit?: boolean;
+  /** Stock sites used (e.g. Pexels, Pixabay); overrides stockCredit when given. */
+  stockSources?: string[];
+  /** Archives whose public domain / CC0 images are shown (e.g. Wikimedia Commons). */
+  archiveSources?: string[];
   /** Channel-wide text (subscribe link, disclosure) placed before the hashtags. */
   footer?: string;
   hashtags: string[];
@@ -121,7 +125,12 @@ export function composeDescription(parts: {
     : parts.sourceUrl
       ? `Source: ${parts.sourceName ? `${parts.sourceName} – ` : ""}${parts.sourceUrl}`
       : "";
-  const credits = [sourceLines, parts.stockCredit ? "Stock images: Pexels" : ""].filter(Boolean);
+  const stock = parts.stockSources?.length ? parts.stockSources : parts.stockCredit ? ["Pexels"] : [];
+  const credits = [
+    sourceLines,
+    parts.archiveSources?.length ? `Archive images (public domain / CC0): ${parts.archiveSources.join(", ")}` : "",
+    stock.length ? `Stock images: ${stock.join(", ")}` : "",
+  ].filter(Boolean);
   if (credits.length) blocks.push(credits.join("\n"));
   if (parts.footer?.trim()) blocks.push(parts.footer.trim());
   if (parts.hashtags.length) blocks.push(parts.hashtags.map((h) => `#${h.replace(/^#/, "").replace(/\s+/g, "")}`).join(" "));

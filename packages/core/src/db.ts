@@ -22,6 +22,8 @@ export interface ProjectRow {
   source_type: SourceType;
   /** Set for projects created together from the Batch page. */
   batch_id: string | null;
+  /** Channel profile the video is made for (see channels.ts). */
+  channel_id: string;
   url: string;
   niche: string;
   duration_min: number;
@@ -87,6 +89,7 @@ export function getDb(): DatabaseSync {
   const jobCols = db.prepare(`PRAGMA table_info(jobs)`).all() as { name: string }[];
   if (!jobCols.some((c) => c.name === "to_step")) db.exec(`ALTER TABLE jobs ADD COLUMN to_step TEXT`);
   if (!cols.some((c) => c.name === "batch_id")) db.exec(`ALTER TABLE projects ADD COLUMN batch_id TEXT`);
+  if (!cols.some((c) => c.name === "channel_id")) db.exec(`ALTER TABLE projects ADD COLUMN channel_id TEXT NOT NULL DEFAULT 'default'`);
   return db;
 }
 
@@ -100,15 +103,17 @@ export function createProject(input: {
   title?: string;
   status?: "draft" | "queued";
   batchId?: string;
+  /** Default: the default channel. */
+  channelId?: string;
 }): ProjectRow {
   const id = randomUUID().slice(0, 8);
   const t = now();
   getDb()
     .prepare(
-      `INSERT INTO projects (id, source_type, url, niche, duration_min, title, status, batch_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO projects (id, source_type, url, niche, duration_min, title, status, batch_id, channel_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .run(id, input.sourceType ?? "url", input.url, input.niche, input.durationMin, input.title ?? null, input.status ?? "queued", input.batchId ?? null, t, t);
+    .run(id, input.sourceType ?? "url", input.url, input.niche, input.durationMin, input.title ?? null, input.status ?? "queued", input.batchId ?? null, input.channelId ?? "default", t, t);
   return getProject(id)!;
 }
 

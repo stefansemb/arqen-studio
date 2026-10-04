@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { exchangeCode } from "@yta/core/youtube";
+import { DEFAULT_CHANNEL, isChannelId, withChannel } from "@yta/core/channels";
 
 /** Google redirects here after sign-in. */
 export async function GET(req: NextRequest) {
@@ -9,6 +10,7 @@ export async function GET(req: NextRequest) {
     const res = NextResponse.redirect(new URL(`${back}?${query}`, req.url));
     res.cookies.delete({ name: "yt_state", path: "/api/youtube" });
     res.cookies.delete({ name: "yt_return", path: "/api/youtube" });
+    res.cookies.delete({ name: "yt_channel", path: "/api/youtube" });
     return res;
   };
 
@@ -19,7 +21,10 @@ export async function GET(req: NextRequest) {
   const error = url.searchParams.get("error");
   if (error) return done(`youtube_error=${encodeURIComponent(error === "access_denied" ? "Access was not granted." : error)}`);
   try {
-    await exchangeCode(url.searchParams.get("code") ?? "");
+    // The channel the sign-in was started for (set by /api/youtube/connect).
+    const cookie = req.cookies.get("yt_channel")?.value ?? DEFAULT_CHANNEL;
+    const channel = isChannelId(cookie) ? cookie : DEFAULT_CHANNEL;
+    await withChannel(channel, () => exchangeCode(url.searchParams.get("code") ?? ""));
     return done("youtube=connected");
   } catch (err) {
     return done(`youtube_error=${encodeURIComponent((err as Error).message)}`);

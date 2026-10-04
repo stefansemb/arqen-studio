@@ -2,7 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import type { NewsVideoProps } from "@yta/video";
 import { getProject } from "./db";
-import { CHANNEL_NAME, projectDir } from "./paths";
+import { projectDir } from "./paths";
+import { getChannel, projectChannelId } from "./channels";
 import { TEMPLATES } from "./templates";
 import { fitClip } from "./timing";
 import { readAppSettings, readSettings } from "./settings";
@@ -62,12 +63,15 @@ export function buildVideoProps(projectId: string, baseUrl: string): NewsVideoPr
   const script = readIfExists<Script>(dir, "script.json");
   const clips = new Map((readIfExists<ClipInfo[]>(dir, "clips.json") ?? []).map((c) => [c.id, c]));
   const { zoom } = readSettings(projectId);
-  const app = readAppSettings();
+  const channelId = projectChannelId(projectId);
+  const channel = getChannel(channelId);
+  const app = readAppSettings(channelId);
   const url = (rel: string) => `${baseUrl.replace(/\/$/, "")}/${rel}`;
 
   return {
     title: script?.title ?? article?.title ?? "",
-    channel: CHANNEL_NAME,
+    channel: channel.name,
+    theme: channel.theme,
     badge: TEMPLATES[getProject(projectId)?.niche ?? ""]?.badge ?? "",
     // Sources are credited in the video description instead of a "via <site>" line on screen.
     source: "",

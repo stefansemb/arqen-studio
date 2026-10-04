@@ -6,6 +6,7 @@ import type { PublishInfo } from "./publish";
 import { readPublish } from "./publishStore";
 import { readAppSettings } from "./settings";
 import { connectionStatus, ensurePlaylist, postComment, YouTubeError } from "./youtube";
+import { withChannel, withProjectChannel } from "./channels";
 
 /**
  * The channel's own comment under each video: Claude's question for viewers plus links to the
@@ -48,8 +49,12 @@ function savePublish(dir: string, publish: PublishInfo) {
   fs.writeFileSync(path.join(dir, "publish.json"), JSON.stringify(publish, null, 2));
 }
 
-/** Posts the project's comment (once). Throws with a readable message when it can't. */
-export async function postProjectComment(projectId: string): Promise<NonNullable<PublishInfo["youtube"]>["comment"]> {
+/** Posts the project's comment (once), as the project's channel. Throws with a readable message when it can't. */
+export function postProjectComment(projectId: string): Promise<NonNullable<PublishInfo["youtube"]>["comment"]> {
+  return withProjectChannel(projectId, () => postAsChannel(projectId));
+}
+
+async function postAsChannel(projectId: string): Promise<NonNullable<PublishInfo["youtube"]>["comment"]> {
   const dir = projectDir(projectId);
   const publish = readPublish(dir);
   const yt = publish?.youtube;
@@ -76,12 +81,18 @@ export async function postProjectComment(projectId: string): Promise<NonNullable
 
 /** Worker housekeeping: posts the comments of videos that have gone public since the last check. */
 export async function postDueComments(log: (msg: string) => void = console.log): Promise<void> {
-  if (!readAppSettings().pinnedComment.enabled) return;
-  const status = connectionStatus();
-  if (!status.connected || !status.canComment) return;
+  // Whether a channel may comment, cached per run (each channel has its own settings and sign-in).
+  const allowed = new Map<string, boolean>();
+  const canComment = (channelId: string) =>
+    withChannel(channelId, () => {
+      const status = connectionStatus();
+      return readAppSettings().pinnedComment.enabled && status.connected && status.canComment;
+    });
   for (const p of listProjects()) {
     const publish = readPublish(projectDir(p.id));
     if (!publish || !commentDue(publish)) continue;
+    if (!allowed.has(p.channel_id)) allowed.set(p.channel_id, canComment(p.channel_id));
+    if (!allowed.get(p.channel_id)) continue;
     try {
       await postProjectComment(p.id);
       log(`Comment posted on ${publish.youtube!.url} (${p.id}). Pin it in YouTube Studio.`);

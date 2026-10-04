@@ -24,6 +24,8 @@ export function VoicePicker(props: {
   /** Prefilled text for "hear it read this", e.g. the start of the script. */
   sampleText?: string;
   disabled?: boolean;
+  /** Channel whose default voice is shown and set (default: the default channel). */
+  channel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [voices, setVoices] = useState<VoiceInfo[] | null>(null);
@@ -36,8 +38,9 @@ export function VoicePicker(props: {
   const [sampleState, setSampleState] = useState<string | null>(null);
   const audio = useRef<HTMLAudioElement | null>(null);
 
+  const channelQuery = props.channel ? `channel=${encodeURIComponent(props.channel)}` : "";
   const loadVoices = (refresh = false) =>
-    fetch(`/api/voices${refresh ? "?refresh=1" : ""}`)
+    fetch(`/api/voices?${[refresh ? "refresh=1" : "", channelQuery].filter(Boolean).join("&")}`)
       .then((r) => r.json())
       .then((d) => {
         if (d.error) throw new Error(d.error);
@@ -49,7 +52,7 @@ export function VoicePicker(props: {
   useEffect(() => {
     void loadVoices();
     return () => audio.current?.pause();
-  }, []);
+  }, [props.channel]);
 
   useEffect(() => {
     if (props.sampleText && !sampleText) setSampleText(props.sampleText);
@@ -124,7 +127,7 @@ export function VoicePicker(props: {
 
   async function makeDefault() {
     if (!current) return;
-    const res = await fetch("/api/settings", {
+    const res = await fetch(`/api/settings?${channelQuery}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ voice: current }),
@@ -255,14 +258,14 @@ export function VoicePicker(props: {
   );
 }
 
-/** Loads the app's default voice, for forms that start from it. */
-export function useDefaultVoice(): VoiceChoice | null {
+/** Loads a channel's default voice (default: the default channel), for forms that start from it. */
+export function useDefaultVoice(channel?: string): VoiceChoice | null {
   const [voice, setVoice] = useState<VoiceChoice | null>(null);
   useEffect(() => {
-    fetch("/api/settings")
+    fetch(`/api/settings${channel ? `?channel=${encodeURIComponent(channel)}` : ""}`)
       .then((r) => r.json())
-      .then((d) => setVoice(d.voice))
+      .then((d) => setVoice(d.voice ?? null))
       .catch(() => {});
-  }, []);
+  }, [channel]);
   return voice;
 }

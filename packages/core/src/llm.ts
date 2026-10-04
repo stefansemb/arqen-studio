@@ -18,12 +18,16 @@ export async function generateStructured<T extends z.ZodType>(opts: {
   prompt: Anthropic.MessageParam["content"];
   effort?: "low" | "medium" | "high";
   maxTokens?: number;
+  /** Default: MODEL. Haiku models run without adaptive thinking and effort, which they don't accept. */
+  model?: string;
 }): Promise<z.infer<T>> {
+  const model = opts.model ?? MODEL;
+  const haiku = model.startsWith("claude-haiku");
   const stream = getClient().messages.stream({
-    model: MODEL,
+    model,
     max_tokens: opts.maxTokens ?? 32000,
-    thinking: { type: "adaptive" },
-    output_config: { effort: opts.effort ?? "medium", format: zodOutputFormat(opts.schema) },
+    ...(haiku ? {} : { thinking: { type: "adaptive" as const } }),
+    output_config: haiku ? { format: zodOutputFormat(opts.schema) } : { effort: opts.effort ?? "medium", format: zodOutputFormat(opts.schema) },
     system: opts.system,
     messages: [{ role: "user", content: opts.prompt }],
   });

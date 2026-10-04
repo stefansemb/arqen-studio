@@ -7,6 +7,8 @@ import { projectDir } from "./paths";
 import { buildVideoProps } from "./props";
 import { readPublish } from "./publishStore";
 import { readAppSettings } from "./settings";
+import { projectChannelId, withProjectChannel } from "./channels";
+import { TEMPLATES } from "./templates";
 import { wordsToSentences } from "./timing";
 import type { Timings, Word } from "./types";
 import { getProject } from "./db";
@@ -205,7 +207,7 @@ export function shortDescription(projectId: string, short: ShortSpec): string {
   const publish = readPublish(projectDir(projectId));
   const parts = [short.hookText];
   if (publish?.youtube?.url) parts.push(`Full video: ${publish.youtube.url}`);
-  const footer = readAppSettings().descriptionFooter.trim();
+  const footer = readAppSettings(projectChannelId(projectId)).descriptionFooter.trim();
   if (footer) parts.push(footer);
   parts.push(["#Shorts", ...(publish?.hashtags ?? []).map((h) => `#${h}`)].slice(0, 3).join(" "));
   return parts.join("\n\n").slice(0, 5000);
@@ -216,6 +218,14 @@ export function shortDescription(projectId: string, short: ShortSpec): string {
  * "#Shorts" in the title helps. Runs in the request (Shorts are small), not as a job.
  */
 export async function uploadShort(
+  projectId: string,
+  shortId: string,
+  opts: Pick<UploadOptions, "privacy" | "publishAt" | "notifySubscribers">,
+): Promise<NonNullable<ShortSpec["youtube"]>> {
+  return withProjectChannel(projectId, () => uploadAsChannel(projectId, shortId, opts));
+}
+
+async function uploadAsChannel(
   projectId: string,
   shortId: string,
   opts: Pick<UploadOptions, "privacy" | "publishAt" | "notifySubscribers">,
@@ -232,7 +242,7 @@ export async function uploadShort(
     {
       privacy: opts.privacy,
       publishAt: opts.publishAt,
-      categoryId: project.niche === "tutorial" ? "27" : "28",
+      categoryId: TEMPLATES[project.niche]?.categoryId ?? "28",
       notifySubscribers: opts.notifySubscribers,
       syntheticMedia: false,
     },

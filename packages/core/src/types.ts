@@ -60,6 +60,8 @@ export interface PlannedScene {
   /** Local asset path relative to the project dir, set by the assets step. */
   asset?: string;
   credit?: string;
+  /** Archive or stock site the image came from, for the description's credits. */
+  source?: string;
 }
 
 /** clips.json: user screen recordings, normalized and described by the clips step. */

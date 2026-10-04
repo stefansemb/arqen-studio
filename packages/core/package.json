@@ -6,6 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./db": "./src/db.ts",
+    "./channels": "./src/channels.ts",
+    "./templates": "./src/templates/index.ts",
     "./steps": "./src/steps/names.ts",
     "./props": "./src/props.ts",
     "./paths": "./src/paths.ts",

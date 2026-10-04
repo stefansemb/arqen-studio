@@ -2,7 +2,7 @@ import { z } from "zod";
 import { generateStructured } from "../llm";
 import { readJson, writeJson, type StepContext } from "../context";
 import { getTemplate } from "../templates";
-import { CHANNEL_NAME } from "../paths";
+import { channelName } from "../channels";
 import { countWords, scriptToText } from "../timing";
 import fs from "node:fs";
 import path from "node:path";
@@ -68,13 +68,18 @@ export async function generateScript(ctx: StepContext): Promise<void> {
   const words = targetWords(ctx);
   const fromNotes = ctx.project.source_type === "notes";
   const clips = readClips(ctx);
+  const channel = channelName();
   ctx.log(
     `Writing a ~${words}-word script (${ctx.project.duration_min} min) from ${fromNotes ? "your notes" : "the article"}${clips.length ? ` and ${clips.length} recording(s)` : ""}`,
   );
 
-  const common = `Target length: about ${words} spoken words in total (hook + segments + cta), within 10%.
-Suggested CTA: "${template.cta}"${CHANNEL_NAME ? `
-The channel is called "${CHANNEL_NAME}"; you may name it in the CTA (never in the hook).` : ""}`;
+  // Long scripts come back well short unless the length is broken down per segment.
+  const segments = Math.round(words / 190);
+  const longForm = words >= 1200 ? `
+This is a long-form video: write about ${segments} segments of roughly ${Math.round(words / segments)} words each. Do not stop early; count as you go.` : "";
+  const common = `Target length: about ${words} spoken words in total (hook + segments + cta), within 10%.${longForm}
+Suggested CTA: "${template.cta}"${channel ? `
+The channel is called "${channel}"; you may name it in the CTA (never in the hook).` : ""}`;
 
   const recordings = clips.length
     ? `
@@ -120,12 +125,14 @@ ${common}
 ${article.text}
 </source>`;
 
-  const script: Script = await generateStructured({
+  const generated: Script = await generateStructured({
     schema: ScriptSchema,
     system: template.scriptSystem,
     effort: "high",
     prompt,
   });
+  // The model sometimes emits a heading with no text; it would become an empty chapter.
+  const script: Script = { ...generated, segments: generated.segments.filter((g) => g.text.trim()) };
 
   writeJson(ctx, "script.json", script);
   if (fromNotes || roundup) updateProject(ctx.project.id, { title: script.title });
@@ -153,6 +160,7 @@ export async function checkScript(ctx: StepContext): Promise<void> {
   const text = scriptToText(script);
   const clips = readClips(ctx);
   const fromNotes = ctx.project.source_type === "notes";
+  const channel = channelName();
 
   const { issues } = await generateStructured({
     schema: CheckSchema,
@@ -162,7 +170,7 @@ export async function checkScript(ctx: StepContext): Promise<void> {
     }${clips.length ? " plus logs of the screen recordings shown in the video" : ""}).`,
     prompt: `List every factual claim in the script (names, numbers, dates, quotes, attributions) that is NOT supported by the source, or contradicts it.
 Use severity "high" for invented or wrong facts and misattributed quotes, "low" for overstatements or speculation not clearly framed as analysis.
-Clearly-labeled opinion and general background knowledge are fine. The closing call to action (subscribe, comment${CHANNEL_NAME ? `, the channel name "${CHANNEL_NAME}"` : ""}) is not a factual claim; ignore it. Return an empty list if everything checks out.
+Clearly-labeled opinion and general background knowledge are fine. The closing call to action (subscribe, comment${channel ? `, the channel name "${channel}"` : ""}) is not a factual claim; ignore it. Return an empty list if everything checks out.
 
 <source>
 ${article.text}

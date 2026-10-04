@@ -3,7 +3,7 @@ import { AbsoluteFill, Audio, interpolate, Sequence, useCurrentFrame, useVideoCo
 import type { NewsVideoProps } from "./types";
 import { SceneView } from "./Scenes";
 import { Captions } from "./Captions";
-import { theme } from "./theme";
+import { resolveTheme, ThemeProvider } from "./theme";
 
 export const SHORT_WIDTH = 1080;
 export const SHORT_HEIGHT = 1920;
@@ -54,6 +54,7 @@ const Band: React.FC<{ children: React.ReactNode; top: number; scale: number; op
 );
 
 export const ShortVideo: React.FC<ShortVideoProps> = ({ base, hookText, audioStartSec, hook }) => {
+  const theme = resolveTheme(base.theme);
   const { fps, durationInFrames } = useVideoConfig();
   const frame = useCurrentFrame();
   const hookIn = interpolate(frame, [0, 8], [0, 1], { extrapolateRight: "clamp" });
@@ -62,6 +63,7 @@ export const ShortVideo: React.FC<ShortVideoProps> = ({ base, hookText, audioSta
   const coverLeft = -(1920 * coverScale - SHORT_WIDTH) / 2;
 
   return (
+    <ThemeProvider value={theme}>
     <AbsoluteFill style={{ backgroundColor: theme.bg, overflow: "hidden" }}>
       {base.scenes.map((scene, i) => {
         const from = Math.round(scene.start * fps);
@@ -129,5 +131,6 @@ export const ShortVideo: React.FC<ShortVideoProps> = ({ base, hookText, audioSta
         </Sequence>
       ) : null}
     </AbsoluteFill>
+    </ThemeProvider>
   );
 };
