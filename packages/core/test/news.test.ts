@@ -28,6 +28,13 @@ describe("parseFeed", () => {
   it("reads Atom entries with href links", () => {
     expect(parseFeed(atom, "Blog")[0]).toMatchObject({ title: "Atom story", url: "https://blog.example.org/post/", summary: "Summary text" });
   });
+
+  it("keeps the item's <source> as publisher (Google News)", () => {
+    const gn = `<rss><channel><item><title>Story - ABC News - Tagline</title><link>https://news.google.com/rss/articles/x</link>
+<pubDate>Sat, 03 Oct 2026 21:50:50 GMT</pubDate><source url="https://abcnews.go.com">ABC News</source></item></channel></rss>`;
+    expect(parseFeed(gn, "Google News")[0].publisher).toBe("ABC News");
+    expect(parseFeed(rss, "Example")[0].publisher).toBeUndefined();
+  });
 });
 
 describe("helpers", () => {

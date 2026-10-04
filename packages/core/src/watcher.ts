@@ -122,6 +122,13 @@ export function isSignalOnlyUrl(url: string): boolean {
 
 /** Google News titles end in " - Publisher"; credit the publisher so confirmations count per outlet. */
 export function fromGoogleNews(item: NewsItem): NewsItem {
+  // The feed's <source> names the outlet; the title may add the site's tagline after it
+  // ("... - ABC News - Breaking News, Latest News and Videos"), so cut the title at the outlet.
+  if (item.publisher) {
+    const at = item.title.lastIndexOf(` - ${item.publisher}`);
+    const title = at > 0 ? item.title.slice(0, at).trim() : item.title;
+    return { ...item, title, source: `${item.publisher} (Google News)` };
+  }
   // Split on the last " - ": publishers can contain hyphens ("the-decoder.com"), headlines too.
   const i = item.title.lastIndexOf(" - ");
   const publisher = i > 0 ? item.title.slice(i + 3).trim() : "";
@@ -137,7 +144,7 @@ const ESTABLISHED = new Set([
   "techcrunch", "the verge", "ars technica", "mit technology review", "wired", "the decoder", "futurism", "the register",
   "siliconangle", "the robot report", "reuters", "bloomberg", "associated press", "ap news", "the guardian",
   "the new york times", "new york times", "the wall street journal", "wall street journal", "wsj", "financial times", "ft",
-  "cnbc", "business insider", "the information", "axios", "semafor", "bbc", "cnn", "the washington post",
+  "cnbc", "abc news", "nbc news", "cbs news", "business insider", "the information", "axios", "semafor", "bbc", "cnn", "the washington post",
   "washington post", "fortune", "venturebeat", "engadget", "zdnet", "platformer", "politico", "npr", "the atlantic",
   "the economist", "the hollywood reporter", "variety", "9to5google", "9to5mac", "macrumors", "the times",
 ]);

@@ -11,6 +11,8 @@ export interface NewsItem {
   source: string;
   published: string; // ISO
   summary: string;
+  /** The feed's own <source> name (Google News: the outlet behind the link). */
+  publisher?: string;
 }
 
 export const DEFAULT_FEEDS: FeedSource[] = [
@@ -64,7 +66,8 @@ export function parseFeed(xml: string, source: string): NewsItem[] {
     const date = new Date(cleanText(tag(b, ["pubDate", "published", "updated", "dc:date"]) ?? ""));
     const summary = cleanText(tag(b, ["description", "summary", "content:encoded", "content"]) ?? "").slice(0, 400);
     if (!title || !/^https?:\/\//.test(url) || Number.isNaN(date.getTime())) continue;
-    items.push({ title, url, source, published: date.toISOString(), summary });
+    const publisher = cleanText(tag(b, ["source"]) ?? "") || undefined;
+    items.push({ title, url, source, published: date.toISOString(), summary, ...(publisher && { publisher }) });
   }
   return items;
 }

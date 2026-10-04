@@ -222,6 +222,11 @@ describe("daily pick and sources", () => {
       title: "Self-restarting model - a first",
       source: "the-decoder.com (Google News)",
     });
+    // The feed's <source> wins over a tagline after the outlet in the title.
+    const abc = { ...item, title: "Trump cuts ties with Anthropic - ABC News - Breaking News, Latest News and Videos", publisher: "ABC News" };
+    expect(fromGoogleNews(abc)).toMatchObject({ title: "Trump cuts ties with Anthropic", source: "ABC News (Google News)" });
+    const { isEstablishedSource } = await import("../src/watcher");
+    expect(isEstablishedSource("ABC News (Google News)")).toBe(true);
     expect(isSignalOnlyUrl("https://www.reddit.com/r/singularity/comments/1")).toBe(true);
     expect(isSignalOnlyUrl("https://techcrunch.com/2026/10/01/x")).toBe(false);
   });
