@@ -40,6 +40,10 @@ const CURSOR_SCRIPT = (zoom: number) => `
     if (document.body) document.body.style.zoom = String(z);
     document.querySelectorAll("textarea, input").forEach((el) => el.setAttribute("spellcheck", "false"));
     if (document.getElementById("__demo-cursor")) return;
+    // Dev-server overlays (e.g. Next.js's "1 Issue" badge) don't belong in the recording.
+    const hide = document.createElement("style");
+    hide.textContent = "nextjs-portal, vite-error-overlay { display: none !important; }";
+    document.documentElement.appendChild(hide);
     const c = document.createElement("div");
     c.id = "__demo-cursor";
     c.style.cssText = "position:fixed;left:0;top:0;width:34px;height:34px;z-index:2147483647;pointer-events:none;transform:translate(960px,540px);filter:drop-shadow(0 3px 6px rgba(0,0,0,.45))";
