@@ -48,6 +48,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .status.done { color: var(--ok); } .status.failed { color: var(--err); } .status.running, .status.queued { color: var(--warn); }
 
 .layout { display: grid; grid-template-columns: 340px 1fr; gap: 16px; align-items: start; }
+/* Grid items default to min-width: auto, so a long log line widened the pipeline column over the tabs. */
+.layout > * { min-width: 0; }
 @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
 
 .steps { display: grid; gap: 6px; }
