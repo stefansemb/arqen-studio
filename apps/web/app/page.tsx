@@ -206,6 +206,8 @@ export default function Home() {
   const [review, setReview] = useState(true);
   /** "From article": pause for script review. Off on the default channel (its news videos run straight through). */
   const [urlReview, setUrlReview] = useState(false);
+  /** "From article": optional editorial angle for the script. */
+  const [angle, setAngle] = useState("");
   const defaultVoice = useDefaultVoice(channelId);
   // null = use the app default; set once the user picks something for this video.
   const [voice, setVoice] = useState<VoiceChoice | null>(null);
@@ -266,7 +268,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           mode === "url"
-            ? { url, durationMin: duration, niche: urlTemplate?.id ?? "ai-news", voice: voice ?? undefined, channelId, review: urlReview }
+            ? { url, durationMin: duration, niche: urlTemplate?.id ?? "ai-news", voice: voice ?? undefined, channelId, review: urlReview, angle: angle.trim() || undefined }
             : mode === "notes"
               ? { notes, title, niche, durationMin: noteDuration, review, draft: withClips, voice: voice ?? undefined, channelId }
               : { script, title, niche, draft: withClips, voice: voice ?? undefined, channelId },
@@ -370,6 +372,17 @@ export default function Home() {
                 </button>
               ))}
             </div>
+            <textarea
+              className="input"
+              rows={3}
+              placeholder={
+                isDefaultChannel
+                  ? "Angle (optional), e.g. Why this matters for solo creators, and what it can't do yet"
+                  : "Angle (optional), e.g. The legend appeared a century after her death. Serial killer or political plot? Show both sides."
+              }
+              value={angle}
+              onChange={(e) => setAngle(e.target.value)}
+            />
             <label className="row" style={{ gap: 8, cursor: "pointer", fontSize: 13 }}>
               <input type="checkbox" checked={urlReview} onChange={(e) => setUrlReview(e.target.checked)} />
               Let me review the script before the voiceover is generated

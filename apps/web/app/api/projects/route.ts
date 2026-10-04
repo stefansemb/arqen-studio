@@ -37,6 +37,8 @@ export async function POST(req: Request) {
     review?: boolean;
     voice?: unknown;
     channelId?: string;
+    /** "From article": the editorial angle for the script (saved as brief.json). */
+    angle?: string;
   };
 
   if (body.notes !== undefined) {
@@ -96,6 +98,13 @@ export async function POST(req: Request) {
     } catch {
       // An invalid voice falls back to the default rather than blocking the video.
     }
+  }
+  // Written before the job is queued so the script step always sees it.
+  const angle = body.angle?.trim().slice(0, 2000);
+  if (angle) {
+    const dir = projectDir(project.id);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "brief.json"), JSON.stringify({ angle }, null, 2));
   }
   // With review, the run stops after the fact check so the script can be edited before paying for the voiceover.
   enqueueJob(project.id, "fetch", body.review ? "scriptCheck" : undefined);

@@ -37,7 +37,10 @@ function clipLog(clips: ClipInfo[]): string {
     .join("\n");
 }
 
-/** brief.json: editorial guidance for news-watcher videos (angle, claims a fact check rejected). */
+/** Templates about current events, where an angle must not invent numbers, prices or dates. */
+const NEWS_TEMPLATES = ["ai-news", "ai-roundup"];
+
+/** brief.json: editorial guidance (an angle from the watcher or the start page, claims a fact check rejected). */
 export interface Brief {
   angle?: string;
   avoid?: string[];
@@ -48,12 +51,16 @@ function readBrief(ctx: StepContext): Brief {
   return fs.existsSync(p) ? (JSON.parse(fs.readFileSync(p, "utf8")) as Brief) : {};
 }
 
-export function briefText(brief: Brief): string {
+export function briefText(brief: Brief, news = true): string {
   const parts: string[] = [];
   if (brief.angle) {
     parts.push(`Editorial angle: ${brief.angle}
-Use it for the hook and framing, but only state facts the source supports. This is breaking news: no benchmark numbers,
-prices, dates or availability details unless the source states them.`);
+Use it for the hook and framing, but only state facts the source supports.${
+      news
+        ? ` This is breaking news: no benchmark numbers,
+prices, dates or availability details unless the source states them.`
+        : ""
+    }`);
   }
   if (brief.avoid?.length) {
     parts.push(`A fact-checker rejected these claims from an earlier draft as unsupported by the source. Do not repeat them:
@@ -117,7 +124,7 @@ ${common}
 ${article.text}
 </notes>`
     : `Write the narration script for a ${ctx.project.duration_min}-minute video based on the source article below.
-${briefText(readBrief(ctx))}
+${briefText(readBrief(ctx), NEWS_TEMPLATES.includes(ctx.project.niche))}
 ${common}
 
 <source url="${article.url}" site="${article.siteName}">
