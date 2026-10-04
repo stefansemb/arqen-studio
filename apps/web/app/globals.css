@@ -27,6 +27,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
 .panel h2 { margin: 0 0 14px; font-size: 12px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); }
 .stack { display: grid; gap: 16px; }
+/* Grid items default to min-width: auto; without this a long unbroken log line widens the whole stack. */
+.stack > * { min-width: 0; }
 
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .input { flex: 1; min-width: 240px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; outline: none; }
@@ -48,7 +50,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .status.done { color: var(--ok); } .status.failed { color: var(--err); } .status.running, .status.queued { color: var(--warn); }
 
 .layout { display: grid; grid-template-columns: 340px 1fr; gap: 16px; align-items: start; }
-/* Grid items default to min-width: auto, so a long log line widened the pipeline column over the tabs. */
+/* Same for the two columns, so the pipeline column can't slide under the tabs. */
 .layout > * { min-width: 0; }
 @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
 
@@ -62,7 +64,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .step .name { flex: 1; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.log { max-height: 320px; overflow: auto; font: 12px/1.6 ui-monospace, Consolas, monospace; background: #0a0a0d; border-radius: 8px; padding: 10px; }
+.log { max-height: 320px; overflow: auto; overflow-wrap: anywhere; font: 12px/1.6 ui-monospace, Consolas, monospace; background: #0a0a0d; border-radius: 8px; padding: 10px; }
 .log .warn { color: var(--warn); } .log .error { color: var(--err); }
 
 .scenes { display: grid; gap: 6px; max-height: 480px; overflow: auto; }
