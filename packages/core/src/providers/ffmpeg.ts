@@ -33,6 +33,34 @@ export async function meanVolume(file: string, fromSec?: number, toSec?: number)
   return parseFloat(m[1]);
 }
 
+/** YouTube plays at about -14 LUFS and never turns quiet audio up, so narration is normalized to that. */
+export const TARGET_LUFS = -14;
+
+/** Integrated loudness (LUFS) and true peak (dBTP) of a file (ffmpeg loudnorm, first pass). */
+export async function measureLoudness(file: string): Promise<{ i: number; tp: number; lra: number; thresh: number }> {
+  const { stderr } = await run("ffmpeg", ["-hide_banner", "-nostats", "-i", file, "-vn", "-af", `loudnorm=I=${TARGET_LUFS}:TP=-1.5:LRA=11:print_format=json`, "-f", "null", "-"], {
+    maxBuffer: 16 * 1024 * 1024,
+  });
+  const m = /\{[^{}]*"input_i"[^{}]*\}/.exec(stderr);
+  if (!m) throw new Error(`ffmpeg could not measure the loudness of ${file}`);
+  const j = JSON.parse(m[0]) as Record<string, string>;
+  return { i: Number(j.input_i), tp: Number(j.input_tp), lra: Number(j.input_lra), thresh: Number(j.input_thresh) };
+}
+
+/**
+ * Brings an mp3 to TARGET_LUFS in place (two-pass loudnorm, linear so the voice isn't compressed).
+ * Returns the loudness before, or null when it was already within 1 LU. Duration is unchanged, so word timings still match.
+ */
+export async function normalizeLoudness(file: string): Promise<number | null> {
+  const m = await measureLoudness(file);
+  if (!Number.isFinite(m.i) || Math.abs(m.i - TARGET_LUFS) <= 1) return null;
+  const tmp = `${file}.norm.mp3`;
+  const filter = `loudnorm=I=${TARGET_LUFS}:TP=-1.5:LRA=11:measured_I=${m.i}:measured_TP=${m.tp}:measured_LRA=${m.lra}:measured_thresh=${m.thresh}:linear=true`;
+  await run("ffmpeg", ["-y", "-v", "error", "-i", file, "-af", filter, "-ar", "44100", "-c:a", "libmp3lame", "-b:a", "192k", tmp]);
+  fs.renameSync(tmp, file);
+  return m.i;
+}
+
 /** Concatenates audio files into one mp3 (re-encoded, so chunk boundaries are clean). */
 export async function concatAudio(files: string[], out: string): Promise<void> {
   if (files.length === 1) {

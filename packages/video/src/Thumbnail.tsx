@@ -63,6 +63,8 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlight
               width: "100%",
               height: "100%",
               objectFit: "cover",
+              // Biased upward: in portraits the face sits in the top third and a centered crop cuts it off.
+              objectPosition: "50% 20%",
               filter: `grayscale(1) contrast(1.2) brightness(${layout === "full" ? 0.6 : 0.8})`,
             }}
           />

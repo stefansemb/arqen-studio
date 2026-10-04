@@ -4,7 +4,7 @@ import path from "node:path";
 import { readJson, writeJson, type StepContext } from "../context";
 import { getTtsProvider } from "../providers/tts";
 import { resolveVoice } from "../settings";
-import { concatAudio, probeDuration } from "../providers/ffmpeg";
+import { concatAudio, normalizeLoudness, probeDuration } from "../providers/ffmpeg";
 import { charsToWords, chunkText, scriptToText } from "../timing";
 import type { Script, Timings, Word } from "../types";
 
@@ -28,6 +28,7 @@ export async function generateVoice(ctx: StepContext): Promise<void> {
     const existing = JSON.parse(fs.readFileSync(timingsFile, "utf8")) as Timings;
     if (existing.voiceKey === key) {
       ctx.log("Voiceover already matches the script and voice; reusing it (no credits used)");
+      await normalize(ctx, path.join(ctx.dir, "voice.mp3"));
       return;
     }
   }
@@ -58,6 +59,7 @@ export async function generateVoice(ctx: StepContext): Promise<void> {
   const out = path.join(ctx.dir, "voice.mp3");
   await concatAudio(files, out);
   fs.rmSync(tmp, { recursive: true, force: true });
+  await normalize(ctx, out);
 
   const timings: Timings = {
     durationSec: await probeDuration(out),
@@ -67,4 +69,14 @@ export async function generateVoice(ctx: StepContext): Promise<void> {
   };
   writeJson(ctx, "timings.json", timings);
   ctx.log(`Voiceover ready: ${timings.durationSec.toFixed(1)} s, ${words.length} words`);
+}
+
+/** Voices differ a lot in level (some land near -25 LUFS); bring the narration to YouTube's playback loudness. */
+async function normalize(ctx: StepContext, file: string): Promise<void> {
+  try {
+    const before = await normalizeLoudness(file);
+    if (before !== null) ctx.log(`Voiceover normalized from ${before.toFixed(1)} to -14 LUFS`);
+  } catch (err) {
+    ctx.log(`Could not normalize the voiceover loudness: ${(err as Error).message}`, "warn");
+  }
 }

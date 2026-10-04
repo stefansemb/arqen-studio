@@ -47,6 +47,10 @@ async function pickBackgrounds(ctx: StepContext): Promise<string[]> {
     ...scenes.filter((s) => s.type === "article"),
     ...(archiveFirst ? [...rest.filter((s) => !isStock(s)), ...rest.filter(isStock)] : rest),
   ];
+  // The opening archive scene is the subject's portrait; a face beats a page of text, so every variant uses it
+  // and the A/B test compares the wording.
+  const opening = archiveFirst && out.length === 0 ? scenes.find((s) => s.asset && !isStock(s)) : undefined;
+  if (opening?.asset) return [opening.asset];
   for (const s of imageScenes) {
     if (out.length >= VARIANTS) break;
     if (s.asset && !out.includes(s.asset)) out.push(s.asset);
