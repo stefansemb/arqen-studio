@@ -26,7 +26,7 @@ const PICK_CANDIDATES = 5;
 const REUSE_WINDOW = 6;
 
 /** Downloads an image into assets/, returning its path relative to the project dir. */
-async function download(url: string, dir: string, name: string): Promise<string | null> {
+export async function download(url: string, dir: string, name: string): Promise<string | null> {
   const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
   if (!res.ok) return null;
   const type = (res.headers.get("content-type") ?? "").split(";")[0].trim();

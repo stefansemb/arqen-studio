@@ -25,7 +25,7 @@ interface Detail {
   script: { title: string; hook: string; segments: { heading: string; text: string }[]; cta: string } | null;
   scriptCheck: { ok: boolean; wordCount: number; issues: { severity: string; claim: string; problem: string }[] } | null;
   scenes:
-    | { start: number; end: number; type: string; text: string; sub?: string; asset?: string; clip?: string; clipStart?: number; clipEnd?: number; zoom?: boolean; motion?: MotionData; graphic?: { template: string; values: Record<string, string> } }[]
+    | { start: number; end: number; type: string; text: string; sub?: string; asset?: string; clip?: string; clipStart?: number; clipEnd?: number; zoom?: boolean; motion?: MotionData; query?: string; credit?: string; graphic?: { template: string; values: Record<string, string> } }[]
     | null;
   clips:
     | { id: string; original: string; thumbnail: string; durationSec: number; summary: string; timeline: { start: number; end: number; description: string }[]; activity?: string }[]
@@ -234,6 +234,9 @@ export default function ProjectPage() {
                       clips={d.clips ?? []}
                       graphics={d.graphicTemplates ?? []}
                       draft={drafts[selected]}
+                      busy={busy}
+                      onImageChanged={load}
+                      onRender={() => rerun("render")}
                       onChange={(edit) =>
                         setDrafts((prev) => {
                           const next = { ...prev };

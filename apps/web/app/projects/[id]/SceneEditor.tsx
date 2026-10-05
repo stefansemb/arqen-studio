@@ -5,6 +5,7 @@ import type { SceneEdit } from "@yta/core/sceneEdits";
 import { fitClip, MAX_CLIP_RATE } from "@yta/core/timing";
 import type { MotionData } from "@yta/core/sceneEdits";
 import type { GraphicTemplate } from "@yta/core/motion";
+import { ImagePicker } from "./ImagePicker";
 
 export interface EditorScene {
   start: number;
@@ -19,7 +20,12 @@ export interface EditorScene {
   sub?: string;
   motion?: MotionData;
   graphic?: { template: string; values: Record<string, string> };
+  query?: string;
+  credit?: string;
 }
+
+/** Scene types whose look comes from a picture (B-roll, or the background behind a card). */
+const PICTURE_TYPES = new Set(["broll", "title", "quote", "stat", "article"]);
 
 export interface EditorClip {
   id: string;
@@ -68,6 +74,11 @@ export function SceneEditor(props: {
   graphics: GraphicTemplate[];
   draft: SceneEdit | undefined;
   onChange: (edit: SceneEdit | undefined) => void;
+  /** A run is going; rendering has to wait. */
+  busy: boolean;
+  /** The scene's picture was swapped (saved already): reload the project. */
+  onImageChanged: () => void;
+  onRender: () => void;
 }) {
   const { scene, clips, graphics, index } = props;
   const video = useRef<HTMLVideoElement>(null);
@@ -347,6 +358,18 @@ export function SceneEditor(props: {
                 : ""}
           Animated with Arqen Motion when the video renders; without it a built-in card is shown.
         </div>
+      ) : null}
+      {!props.draft && PICTURE_TYPES.has(scene.type) ? (
+        <ImagePicker
+          projectId={props.projectId}
+          index={index}
+          asset={scene.asset}
+          query={scene.query}
+          credit={scene.credit}
+          busy={props.busy}
+          onChanged={props.onImageChanged}
+          onRender={props.onRender}
+        />
       ) : null}
     </div>
   );
