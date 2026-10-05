@@ -151,6 +151,14 @@ export const SceneView: React.FC<{ scene: VideoScene; index: number }> = ({ scen
     textAlign: "center",
   };
 
+  if (scene.motion) {
+    return (
+      <AbsoluteFill style={{ backgroundColor: theme.bg }}>
+        <OffthreadVideo src={scene.motion} muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      </AbsoluteFill>
+    );
+  }
+
   switch (scene.type) {
     case "broll":
       return (
@@ -161,6 +169,9 @@ export const SceneView: React.FC<{ scene: VideoScene; index: number }> = ({ scen
         </AbsoluteFill>
       );
 
+    // Without a rendered Arqen Motion clip, timelines and comparisons fall back to a title card.
+    case "timeline":
+    case "compare":
     case "title":
       return (
         <AbsoluteFill>

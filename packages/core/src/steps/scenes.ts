@@ -7,6 +7,7 @@ import { getTemplate } from "../templates";
 import { normalizeScenes, wordsToSentences } from "../timing";
 import type { Article, ClipInfo, PlannedScene, Timings } from "../types";
 import { planDemoScenes } from "../demo/project";
+import { motionDir } from "../providers/motion";
 
 /** Default average scene length; templates can set their own (sceneSeconds). */
 const TARGET_SCENE_SEC = 7;
@@ -15,7 +16,7 @@ const ScenesSchema = z.object({
   scenes: z.array(
     z.object({
       startSentence: z.number().int().describe("Index of the sentence where this scene begins"),
-      type: z.enum(["broll", "title", "quote", "stat", "article", "clip"]),
+      type: z.enum(["broll", "title", "quote", "stat", "article", "clip", "timeline", "compare"]),
       text: z
         .string()
         .describe("On-screen text: headline, quote, or stat label. For clip: a short step label or empty. Empty for broll."),
@@ -24,6 +25,20 @@ const ScenesSchema = z.object({
       clip: z.string().nullable().describe("For clip scenes: the clip id, e.g. clip-1. Otherwise null"),
       clipStart: z.number().nullable().describe("For clip scenes: where to start in the recording, seconds"),
       clipEnd: z.number().nullable().describe("For clip scenes: where to stop in the recording, seconds"),
+      events: z
+        .array(z.object({ when: z.string().describe("Year or date, e.g. 2023 or Mar 2025"), what: z.string().describe("Max 4 words") }))
+        .nullable()
+        .describe("For timeline scenes: 3-6 events in chronological order. Otherwise null"),
+      compare: z
+        .object({
+          left: z.string().describe("Short name of the first side, 1-2 words"),
+          right: z.string().describe("Short name of the second side, 1-2 words"),
+          rows: z
+            .array(z.object({ label: z.string().describe("Max 3 words"), left: z.string(), right: z.string() }))
+            .describe("2-4 rows; values short, numbers when possible (e.g. 1M, $15, 82%)"),
+        })
+        .nullable()
+        .describe("For compare scenes. Otherwise null"),
     }),
   ),
 });
@@ -54,6 +69,8 @@ export async function planScenes(ctx: StepContext): Promise<void> {
   const target = Math.max(3, Math.round(timings.durationSec / sceneSec));
   // Templates can rule out the source page's own images (mixed licenses); B-roll then comes from licensed archives.
   const articleImages = template.articleScenes === false ? 0 : article.images.length;
+  // Timelines and comparisons need Arqen Motion; without it they would only be plain title cards.
+  const motion = motionDir() !== null;
   ctx.log(`Planning ~${target} scenes over ${sentences.length} sentences${clips.length ? ` with ${clips.length} clip(s)` : ""}`);
 
   const clipRules = clips.length
@@ -78,10 +95,19 @@ Scene types:
 - quote: a quote card. text = the exact quote from the narration, sub = who said it.
 - stat: a big number. sub = the number as it should appear (e.g. "$40B", "3x", "92%"), text = short label.
 - article: shows an image from the source article with a caption in text.
-${template.sceneGuidance}`,
+${
+  motion
+    ? `- timeline: an animated timeline. text = short headline (max 6 words), events = 3-6 dated events from the narration.
+  Use when the narration walks through how something developed over time (releases, funding rounds, a history).
+- compare: two things side by side. text = short headline, compare = the two names and 2-4 rows of values from the narration.
+  Use when the narration contrasts two products, models or companies on concrete points.
+Only use timeline/compare when the narration itself gives the facts; never invent dates or values. At most one of each per video.
+`
+    : ""
+}${template.sceneGuidance}`,
     prompt: `Plan about ${target} scenes (roughly one every ${sceneSec} seconds; never longer than ${clips.length ? 20 : Math.max(15, sceneSec + 6)} seconds).
 Scenes must be listed in order, the first must start at sentence 0, and each scene lasts until the next one starts.
-Avoid more than two card scenes (title/quote/stat) in a row. Don't repeat the same stock query.
+Avoid more than two card scenes (title/quote/stat${motion ? "/timeline/compare" : ""}) in a row. Don't repeat the same stock query.
 ${articleImages ? `The source article has ${articleImages} image(s) available for "article" scenes; use at most ${articleImages}.` : `There are no article images, so do not use "article" scenes.`}
 
 ${clipRules}
@@ -102,6 +128,14 @@ ${sentences.map((s) => `[${s.index}] ${s.start.toFixed(1)}-${s.end.toFixed(1)}: 
         sub: s.sub ?? undefined,
         query: s.query ?? undefined,
       };
+      if (s.type === "timeline" || s.type === "compare") {
+        const data =
+          s.type === "timeline"
+            ? s.events?.length ? { events: s.events } : undefined
+            : s.compare?.rows.length ? { left: s.compare.left, right: s.compare.right, rows: s.compare.rows } : undefined;
+        // Picked without Motion or without facts: a title card says the same in words.
+        return motion && data ? { ...scene, motion: data } : { ...scene, type: "title" as const };
+      }
       // The model may still pick "article" against the rules; show an archive image instead.
       if (s.type === "article" && !articleImages) return { ...scene, type: "broll" as const, text: "", query: scene.query ?? scene.text };
       if (s.type !== "clip") return scene;

@@ -1,7 +1,7 @@
 import type { CameraKey } from "./camera";
 import type { ThemeOverrides } from "./theme";
 
-export type SceneType = "broll" | "title" | "quote" | "stat" | "article" | "clip";
+export type SceneType = "broll" | "title" | "quote" | "stat" | "article" | "clip" | "timeline" | "compare";
 
 export interface VideoScene {
   start: number; // seconds
@@ -14,6 +14,8 @@ export interface VideoScene {
   /** Absolute URL of the image (B-roll or article image). */
   image?: string;
   credit?: string;
+  /** Pre-rendered full-screen graphics clip (Arqen Motion) shown instead of the built-in card. */
+  motion?: string;
   /** Screen recording for "clip" scenes, already fitted to the scene length. */
   video?: {
     src: string;

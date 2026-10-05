@@ -57,11 +57,24 @@ export interface PlannedScene {
   clipEnd?: number;
   /** Auto zoom for "clip" scenes; on unless set to false. */
   zoom?: boolean;
+  /** Facts for "timeline" and "compare" scenes, filled in by the scene planner. */
+  motion?: MotionData;
+  /** Rendered Arqen Motion clip relative to the project dir, set by the motion step. */
+  motionClip?: string;
   /** Local asset path relative to the project dir, set by the assets step. */
   asset?: string;
   credit?: string;
   /** Archive or stock site the image came from, for the description's credits. */
   source?: string;
+}
+
+export interface MotionData {
+  /** "timeline": events in chronological order. */
+  events?: { when: string; what: string }[];
+  /** "compare": the two sides and the rows that compare them. */
+  left?: string;
+  right?: string;
+  rows?: { label: string; left: string; right: string }[];
 }
 
 /** clips.json: user screen recordings, normalized and described by the clips step. */

@@ -6,6 +6,7 @@ import { projectDir } from "./paths";
 import { getChannel, projectChannelId } from "./channels";
 import { TEMPLATES } from "./templates";
 import { fitClip } from "./timing";
+import { MOTION_SCENE_TYPES } from "./providers/motion";
 import { readAppSettings, readSettings } from "./settings";
 import { cameraPath, simplifyPath, zoomOptions, type ActivitySample, type ZoomSettings } from "./zoom";
 import type { CameraKey } from "@yta/video/camera";
@@ -86,6 +87,8 @@ export function buildVideoProps(projectId: string, baseUrl: string): NewsVideoPr
         text: s.text,
         sub: s.sub,
         image: s.asset ? url(s.asset) : undefined,
+        // Only while the scene is still a graphics type; a scene edited into e.g. a title drops it.
+        motion: s.motionClip && MOTION_SCENE_TYPES.has(s.type) ? url(s.motionClip) : undefined,
         credit: s.credit,
         video: clip
           ? withCamera({ src: url(clip.file), ...fitClip(s.clipStart ?? 0, s.clipEnd ?? clip.durationSec, s.end - s.start) }, s.zoom === false ? undefined : clipCamera(dir, clip, zoom))
