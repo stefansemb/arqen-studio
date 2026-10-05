@@ -57,6 +57,8 @@ export interface ThumbnailVariant extends ThumbnailText {
   /** Presenter cut-out relative to the project dir, if any. */
   presenter?: string;
   layout: "right" | "full";
+  /** The arrow: from the presenter to the headline ("text"), or from the headline to the subject at x,y. */
+  arrow?: { to: "text" } | { to: "subject"; x: number; y: number; what: string };
 }
 
 export const YT = { titleMax: 100, titleIdeal: 70, descriptionMax: 5000, tagsMax: 500, chapterMinSec: 10, chaptersMin: 3 };

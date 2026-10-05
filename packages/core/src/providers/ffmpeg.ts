@@ -1,6 +1,7 @@
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 const run = promisify(execFile);
@@ -8,6 +9,25 @@ const run = promisify(execFile);
 /** Runs ffmpeg with the given arguments (errors only on the console). */
 export async function runFfmpeg(args: string[]): Promise<void> {
   await run("ffmpeg", ["-v", "error", ...args], { maxBuffer: 16 * 1024 * 1024 });
+}
+
+/** Width and height of an image or video. */
+export async function imageSize(file: string): Promise<{ width: number; height: number }> {
+  const { stdout } = await run("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", file]);
+  const [width, height] = stdout.trim().split(",").map(Number);
+  if (!width || !height) throw new Error(`ffprobe could not read the size of ${file}`);
+  return { width, height };
+}
+
+/** The alpha channel of an image scaled to width x height, one byte per pixel (0 = transparent). */
+export async function alphaMask(file: string, width: number, height: number): Promise<Buffer> {
+  const out = path.join(os.tmpdir(), `alpha-${process.pid}-${Date.now()}.raw`);
+  try {
+    await runFfmpeg(["-y", "-i", file, "-vf", `alphaextract,scale=${width}:${height}`, "-f", "rawvideo", "-pix_fmt", "gray", out]);
+    return fs.readFileSync(out);
+  } finally {
+    fs.rmSync(out, { force: true });
+  }
 }
 
 export async function probeDuration(file: string): Promise<number> {

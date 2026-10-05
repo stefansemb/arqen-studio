@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type { AddressInfo } from "node:net";
 import { renderStill, selectComposition } from "@remotion/renderer";
@@ -14,6 +15,7 @@ import { readPublish } from "../publishStore";
 import { getBundle, serveDir } from "./render";
 import { listGestures, pickGesture, presenterFile } from "../presenter";
 import { SOURCE_NAMES, STOCK_SOURCES } from "../providers/images";
+import { pickSubjectTargets, presenterEdges } from "../providers/thumbArrow";
 
 const VARIANTS = 3;
 
@@ -75,6 +77,7 @@ export async function renderThumbnails(ctx: StepContext): Promise<void> {
     const { port } = server.address() as AddressInfo;
     const serveUrl = await getBundle();
     const variants: ThumbnailVariant[] = [];
+    const props: ThumbnailProps[] = [];
     for (let i = 0; i < VARIANTS; i++) {
       const text = publish.thumbnailTexts[i % publish.thumbnailTexts.length];
       const background = backgrounds.length ? backgrounds[i % backgrounds.length] : undefined;
@@ -98,18 +101,50 @@ export async function renderThumbnails(ctx: StepContext): Promise<void> {
         layout,
         theme: getChannel().theme,
       };
-      const composition = await selectComposition({ serveUrl, id: "Thumbnail", inputProps });
-      const file = `thumbs/thumb-${i}.jpg`;
-      await renderStill({
-        composition,
-        serveUrl,
-        inputProps,
-        output: path.join(ctx.dir, file),
-        imageFormat: "jpeg",
-        jpegQuality: 92,
-      });
-      variants.push({ ...text, ...(gesture ? { gesture } : {}), file, background, presenter, layout });
+      props.push(inputProps);
+      variants.push({ ...text, ...(gesture ? { gesture } : {}), file: `thumbs/thumb-${i}.jpg`, background, presenter, layout });
     }
+
+    const still = async (inputProps: ThumbnailProps, output: string) => {
+      const composition = await selectComposition({ serveUrl, id: "Thumbnail", inputProps });
+      await renderStill({ composition, serveUrl, inputProps, output, imageFormat: "jpeg", jpegQuality: 92 });
+    };
+
+    // Arrows sit between headline and person, never on him: with the presenter they point from his edge to the
+    // highlighted word (his edge comes from the cut-out, no AI); without him from the headline to the subject,
+    // which Claude Haiku finds on gridded drafts. The component leaves an arrow out where the gap is too narrow.
+    if (readAppSettings().thumbnailArrow) {
+      try {
+        for (const [i, v] of variants.entries()) {
+          if (!v.presenter) continue;
+          props[i] = { ...props[i], arrow: { to: "text" }, presenterEdge: await presenterEdges(path.join(ctx.dir, v.presenter)) };
+          variants[i] = { ...v, arrow: { to: "text" } };
+        }
+        const bare = variants.map((v, i) => (v.presenter ? -1 : i)).filter((i) => i >= 0);
+        if (bare.length) {
+          const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "thumb-grid-"));
+          try {
+            const drafts = bare.map((i) => path.join(tmp, `draft-${i}.jpg`));
+            for (const [k, i] of bare.entries()) await still({ ...props[i], grid: true }, drafts[k]);
+            const targets = await pickSubjectTargets(drafts);
+            targets.forEach((t, k) => {
+              if (!t) return;
+              const i = bare[k];
+              props[i] = { ...props[i], arrow: { to: "subject", x: t.x, y: t.y } };
+              variants[i] = { ...variants[i], arrow: { to: "subject", ...t } };
+            });
+            const named = targets.map((t) => t?.what).filter(Boolean);
+            ctx.log(named.length ? `Arrows point at ${named.join("; ")}` : "No arrows: no clear subject in the pictures");
+          } finally {
+            fs.rmSync(tmp, { recursive: true, force: true });
+          }
+        }
+      } catch (err) {
+        ctx.log(`Arrows skipped: ${(err as Error).message}`, "warn");
+      }
+    }
+
+    for (const [i, p] of props.entries()) await still(p, path.join(ctx.dir, variants[i].file));
     writeJson(ctx, "publish.json", {
       ...publish,
       thumbnails: variants,

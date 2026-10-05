@@ -416,6 +416,13 @@ export default function SettingsPage() {
             (like a &quot;FREE&quot; sticker; off = the word is just colored)
           </span>
         </label>
+        <label className="row" style={{ gap: 8, cursor: "pointer" }}>
+          <input type="checkbox" checked={s.thumbnailArrow} onChange={(e) => update({ thumbnailArrow: e.target.checked })} />
+          Thumbnails: add an arrow pointing at the key thing in the picture
+          <span className="muted" style={{ fontSize: 12 }}>
+            (Claude Haiku picks it, about 1 kr per video; no arrow when nothing is worth pointing at)
+          </span>
+        </label>
         <div className="muted" style={{ fontSize: 12 }}>
           Intro, end screen and footer apply to videos rendered or described after you save.
         </div>

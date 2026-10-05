@@ -48,6 +48,8 @@ export interface AppSettings {
   };
   /** Thumbnails: the highlighted word sits in an accent-colored box (like a "FREE" sticker). */
   thumbnailBox: boolean;
+  /** Thumbnails: a bold arrow from the headline to the most important thing in the picture (Claude Haiku picks it). */
+  thumbnailArrow: boolean;
   /** Comment posted as the channel when a video goes public (pin it by hand: the API can't). */
   pinnedComment: { enabled: boolean; subscribeUrl: string };
   /** Defaults for approving uploads from the Batch page. */
@@ -81,6 +83,7 @@ export const DEFAULT_APP_SETTINGS: Omit<AppSettings, "voice"> = {
   watcher: { enabled: false, intervalMin: 15, autoBuild: false, maxPerWeek: 7, cooldownHours: 12, minCreditsLeft: 4000, killWindowMin: 30, maxConfirmHours: 6, dailyPick: true, dailyPickHour: 14 },
   uploadDefaults: { privacy: "schedule", scheduleTime: "15:00", notifySubscribers: true },
   thumbnailBox: true,
+  thumbnailArrow: true,
   pinnedComment: { enabled: true, subscribeUrl: "" },
 };
 
@@ -193,6 +196,7 @@ function sanitizeApp(raw: Partial<AppSettings>, channelId = DEFAULT_CHANNEL): Ap
     uploadDefaults: sanitizeUploadDefaults(raw.uploadDefaults),
     pinnedComment: sanitizePinnedComment(raw.pinnedComment),
     thumbnailBox: typeof raw.thumbnailBox === "boolean" ? raw.thumbnailBox : d.thumbnailBox,
+    thumbnailArrow: typeof raw.thumbnailArrow === "boolean" ? raw.thumbnailArrow : d.thumbnailArrow,
   };
 }
 

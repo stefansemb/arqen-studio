@@ -1,5 +1,5 @@
-import React from "react";
-import { AbsoluteFill, Img } from "remotion";
+import React, { useEffect, useRef, useState } from "react";
+import { AbsoluteFill, continueRender, delayRender, Img } from "remotion";
 import { resolveTheme, type ThemeOverrides } from "./theme";
 
 export interface ThumbnailProps {
@@ -20,7 +20,22 @@ export interface ThumbnailProps {
   layout: "right" | "full";
   /** Channel colors and font; the default purple/cyan look when absent. */
   theme?: ThemeOverrides;
+  /**
+   * A bold arrow in the gap between headline and person, never on the person. "text": from the presenter's
+   * edge to the highlighted word (needs presenterEdge). "subject": from the headline to x,y (1280x720 px),
+   * a point just left of the picture's subject. Left out when the gap is too narrow.
+   */
+  arrow?: { to: "text" } | { to: "subject"; x: number; y: number };
+  /** The presenter's left edge (px) for every 10 px row of the thumbnail; 1280 where he isn't. */
+  presenterEdge?: number[];
+  /** Draws the labelled cell grid (THUMB_GRID) used when asking which cell holds the thing to point at. */
+  grid?: boolean;
 }
+
+/** Grid for picking arrow targets: columns A-H, rows 1-6, cells of 160x120 px. */
+export const THUMB_GRID = { cols: 8, rows: 6, cellW: 160, cellH: 120 };
+/** Where the presenter cut-out is fitted (bottom right); core reads his edge with the same numbers. */
+export const PRESENTER_BOX = { right: 20, height: 690, maxWidth: 700 };
 
 export const THUMB_WIDTH = 1280;
 export const THUMB_HEIGHT = 720;
@@ -36,7 +51,58 @@ function lines(text: string, max = 12): string[] {
   return out.slice(0, 4);
 }
 
-export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlightBox, image, presenter, channel, badge, layout, theme: overrides }) => {
+/** A gently curved arrow from (x0, y0) with its tip at (x1, y1), bulging towards the top of the frame. */
+export function arrowBetween(x0: number, y0: number, x1: number, y1: number): { d: string; head: string } {
+  const len = Math.hypot(x1 - x0, y1 - y0) || 1;
+  const ux = (x1 - x0) / len;
+  const uy = (y1 - y0) / len;
+  let nx = -uy;
+  let ny = ux;
+  if (ny > 0) [nx, ny] = [-nx, -ny];
+  const cx = (x0 + x1) / 2 + nx * len * 0.18;
+  const cy = (y0 + y1) / 2 + ny * len * 0.18;
+  const tl = Math.hypot(x1 - cx, y1 - cy) || 1;
+  const tx = (x1 - cx) / tl;
+  const ty = (y1 - cy) / tl;
+  const bx = x1 - tx * 58;
+  const by = y1 - ty * 58;
+  const f = (n: number) => n.toFixed(1);
+  return {
+    d: `M ${f(x0)} ${f(y0)} Q ${f(cx)} ${f(cy)} ${f(bx + tx * 6)} ${f(by + ty * 6)}`,
+    head: `${f(x1)},${f(y1)} ${f(bx - ty * 38)},${f(by + tx * 38)} ${f(bx + ty * 38)},${f(by - tx * 38)}`,
+  };
+}
+
+type Line = { left: number; right: number; top: number; bottom: number; hl: boolean };
+/** Gaps narrower than this get no arrow: it would be a stub. */
+const MIN_ARROW_GAP = 110;
+
+/** Where the arrow goes, from the measured headline lines; null when it doesn't fit. */
+function placeArrow(arrow: NonNullable<ThumbnailProps["arrow"]>, lines: Line[], presenterEdge?: number[]): { d: string; head: string } | null {
+  if (!lines.length) return null;
+  const mid = (l: Line) => (l.top + l.bottom) / 2;
+  if (arrow.to === "text") {
+    if (!presenterEdge?.length) return null;
+    const line = lines.find((l) => l.hl) ?? lines[Math.floor(lines.length / 2)];
+    const y = mid(line);
+    const y0 = y + 30;
+    // His edge where the arrow starts (a little below the word), or the nearest row within 80 px where he is.
+    const band = (yy: number) => presenterEdge[Math.max(0, Math.min(presenterEdge.length - 1, Math.floor(yy / 10)))];
+    let edge = THUMB_WIDTH;
+    for (let dy = 0; dy <= 80 && edge >= THUMB_WIDTH; dy += 10) edge = Math.min(band(y0 + dy), band(y0 - dy));
+    if (edge >= THUMB_WIDTH) return null;
+    // Starts just on his edge, ends just right of the word.
+    const x0 = edge + 12;
+    const x1 = line.right + 28;
+    return x0 - x1 >= MIN_ARROW_GAP ? arrowBetween(x0, y0, x1, y) : null;
+  }
+  const target = arrow;
+  const line = lines.reduce((best, l) => (Math.abs(mid(l) - target.y) < Math.abs(mid(best) - target.y) ? l : best));
+  const x0 = line.right + 28;
+  return target.x - x0 >= MIN_ARROW_GAP ? arrowBetween(x0, mid(line), target.x, target.y) : null;
+}
+
+export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlightBox, image, presenter, channel, badge, layout, theme: overrides, arrow, presenterEdge, grid }) => {
   const theme = resolveTheme(overrides);
   const rows = lines(text);
   const longest = Math.max(...rows.map((r) => r.length), 1);
@@ -45,6 +111,26 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlight
   // Big enough to read on a phone, small enough that the longest line fits the text column.
   const fontSize = Math.min(presenter ? 124 : 140, Math.floor((presenter ? 1235 : 1350) / longest), Math.floor(520 / rows.length));
   const hl = highlight?.toUpperCase().replace(/[^\p{L}\p{N}$%]/gu, "");
+  // The arrow needs the headline's real line boxes (lines can wrap inside the column), measured once laid out.
+  const column = useRef<HTMLDivElement>(null);
+  const [lineBoxes, setLineBoxes] = useState<Line[] | null>(null);
+  const [handle] = useState(() => (arrow ? delayRender("Measuring the headline for the arrow") : null));
+  useEffect(() => {
+    if (handle === null) return;
+    void document.fonts.ready.then(() => {
+      const out: Line[] = [];
+      for (const w of column.current?.querySelectorAll<HTMLElement>("[data-w]") ?? []) {
+        // Spans are positioned against the text column, which sits at left 56, top 120.
+        const box = { left: 56 + w.offsetLeft, right: 56 + w.offsetLeft + w.offsetWidth, top: 120 + w.offsetTop, bottom: 120 + w.offsetTop + w.offsetHeight };
+        const line = out.find((l) => Math.abs(l.top - box.top) < 12);
+        if (line) Object.assign(line, { left: Math.min(line.left, box.left), right: Math.max(line.right, box.right), hl: line.hl || w.dataset.hl === "1" });
+        else out.push({ ...box, hl: w.dataset.hl === "1" });
+      }
+      setLineBoxes(out);
+      continueRender(handle);
+    });
+  }, [handle]);
+  const arrowShape = arrow && lineBoxes ? placeArrow(arrow, lineBoxes, presenterEdge) : null;
 
   // Background photos come from articles and stock sites in every colour imaginable. They are
   // turned grey and re-tinted in the channel's accent colors so every thumbnail shares one palette.
@@ -116,10 +202,10 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlight
             src={presenter}
             style={{
               position: "absolute",
-              right: 20,
+              right: PRESENTER_BOX.right,
               bottom: 0,
-              height: 690,
-              maxWidth: 700,
+              height: PRESENTER_BOX.height,
+              maxWidth: PRESENTER_BOX.maxWidth,
               objectFit: "contain",
               objectPosition: "bottom right",
               filter: `drop-shadow(0 0 3px ${theme.accent2}) drop-shadow(0 18px 40px #000c)`,
@@ -139,6 +225,7 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlight
       </div>
 
       <div
+        ref={column}
         style={{
           position: "absolute",
           left: 56,
@@ -171,6 +258,8 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlight
               return on && highlightBox ? (
                 <React.Fragment key={j}>
                   <span
+                    data-w="1"
+                    data-hl="1"
                     style={{
                       display: "inline-block",
                       background: theme.accent2,
@@ -187,7 +276,7 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlight
                   {space}
                 </React.Fragment>
               ) : (
-                <span key={j} style={{ color: on ? theme.accent2 : "#fff" }}>
+                <span key={j} data-w="1" data-hl={on ? "1" : undefined} style={{ color: on ? theme.accent2 : "#fff" }}>
                   {w}
                   {space}
                 </span>
@@ -196,6 +285,33 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlight
           </div>
         ))}
       </div>
+
+      {arrowShape ? (
+        <svg width={THUMB_WIDTH} height={THUMB_HEIGHT} style={{ position: "absolute", inset: 0, filter: "drop-shadow(0 8px 18px #000c)" }}>
+          <path d={arrowShape.d} fill="none" stroke="#000" strokeWidth={36} strokeLinecap="round" />
+          <polygon points={arrowShape.head} fill="#000" stroke="#000" strokeWidth={16} strokeLinejoin="round" />
+          <path d={arrowShape.d} fill="none" stroke={theme.accent2} strokeWidth={21} strokeLinecap="round" />
+          <polygon points={arrowShape.head} fill={theme.accent2} stroke={theme.accent2} strokeWidth={2} strokeLinejoin="round" />
+        </svg>
+      ) : null}
+
+      {grid ? (
+        <svg width={THUMB_WIDTH} height={THUMB_HEIGHT} style={{ position: "absolute", inset: 0 }}>
+          {Array.from({ length: THUMB_GRID.cols * THUMB_GRID.rows }, (_, i) => {
+            const c = i % THUMB_GRID.cols;
+            const r = Math.floor(i / THUMB_GRID.cols);
+            return (
+              <g key={i}>
+                <rect x={c * THUMB_GRID.cellW} y={r * THUMB_GRID.cellH} width={THUMB_GRID.cellW} height={THUMB_GRID.cellH} fill="none" stroke="#ff3355" strokeWidth={2} />
+                <rect x={c * THUMB_GRID.cellW + 4} y={r * THUMB_GRID.cellH + 4} width={38} height={26} fill="#000c" />
+                <text x={c * THUMB_GRID.cellW + 8} y={r * THUMB_GRID.cellH + 24} fill="#fff" fontSize={20} fontWeight={700} fontFamily="Arial">
+                  {String.fromCharCode(65 + c) + (r + 1)}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      ) : null}
     </AbsoluteFill>
   );
 };
