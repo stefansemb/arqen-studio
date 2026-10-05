@@ -6,7 +6,7 @@ import { getChannel } from "../channels";
 import { MOTION_SCENE_TYPES, motionDir, renderMotion, type MotionJob } from "../providers/motion";
 import { NARRATION_LEAD_IN_SEC } from "../props";
 import type { VideoScene } from "@yta/video";
-import type { PlannedScene } from "../types";
+import type { PlannedScene, Timings, Word } from "../types";
 
 /** Extra seconds rendered past the scene end, so the video never runs out before the cut. */
 const TAIL_SEC = 0.5;
@@ -74,6 +74,80 @@ export function motionJob(scene: PlannedScene, durationSec: number, accents: { a
   }
 }
 
+const STOP_WORDS = new Set("a an and are as at be by for from in is it its my of on or the this that to with you your".split(" "));
+const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+
+/** Same word, or the same stem for longer words ("thumbnails" ~ "thumbnail", "ranks" ~ "ranking"). */
+function sameWord(word: string, token: string): boolean {
+  const w = norm(word);
+  if (w === token) return true;
+  if (w.length < 4 || token.length < 4) return false;
+  return w.startsWith(token.slice(0, Math.max(4, token.length - 2))) || token.startsWith(w.slice(0, Math.max(4, w.length - 2)));
+}
+
+/**
+ * When the narration names each item: for every label, the first spoken word (in order, after the
+ * previous item) that matches one of its words. Unmatched items are spaced between their neighbours.
+ * Times are relative to the clip start. Null when fewer than half the items are found. Pure.
+ */
+export function cueTimes(labels: string[], words: Word[], durationSec: number): number[] | null {
+  if (labels.length < 2) return null;
+  let cursor = 0;
+  const found: (number | null)[] = labels.map((label) => {
+    const tokens = label.split(/[\s/+&,|-]+/).map(norm).filter((t) => t.length >= 2 && !STOP_WORDS.has(t));
+    for (let i = cursor; i < words.length; i++) {
+      if (tokens.some((t) => sameWord(words[i].text, t))) {
+        cursor = i + 1;
+        return words[i].start;
+      }
+    }
+    return null;
+  });
+  const known = found.map((t, i) => [i, t] as const).filter((x): x is readonly [number, number] => x[1] !== null);
+  if (known.length < Math.ceil(labels.length / 2)) return null;
+  const times = found.map((t, i) => {
+    if (t !== null) return t;
+    const before = [...known].reverse().find(([k]) => k < i);
+    const after = known.find(([k]) => k > i);
+    if (before && after) return before[1] + ((after[1] - before[1]) * (i - before[0])) / (after[0] - before[0]);
+    if (before) return before[1] + 0.8 * (i - before[0]);
+    return after![1] - 0.6 * (after![0] - i);
+  });
+  // Keep them in order, a little apart, and inside the clip.
+  const out: number[] = [];
+  for (const t of times) out.push(Math.round(Math.min(durationSec - 0.6, Math.max(out.length ? out[out.length - 1] + 0.35 : 0.3, t)) * 100) / 100);
+  return out;
+}
+
+const lines = (s: unknown) => String(s ?? "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+const cols = (l: string) => l.split("|").map((c) => c.trim());
+
+/** The items a template shows one by one, in order, as the narration would name them; [] = no cues. */
+export function cueLabels(job: MotionJob): string[] {
+  const v = job.values;
+  switch (job.template) {
+    case "checklist":
+      return lines(v.points).slice(0, 5);
+    case "steps":
+      return lines(v.steps).slice(0, 5).map((l) => cols(l)[1] ?? l);
+    case "flow":
+      return [String(v.from ?? ""), ...lines(v.branches).slice(0, 4), String(v.to ?? "")];
+    case "timeline":
+      return lines(v.events).slice(0, 7).map((l) => `${cols(l)[0]} ${cols(l).slice(1).join(" ")}`);
+    case "compare":
+      return lines(v.rows).slice(0, 5).map((l) => cols(l)[0]);
+    default:
+      return [];
+  }
+}
+
+/** Adds narration cues to a job when its template reveals items one by one and the narration names them. */
+export function withCues(job: MotionJob, words: Word[]): MotionJob {
+  const labels = cueLabels(job);
+  const cues = labels.length ? cueTimes(labels, words, Number(job.values.duration) || 0) : null;
+  return cues ? { ...job, values: { ...job.values, cues: cues.join(",") } } : job;
+}
+
 /** Size of graphics clips in Shorts: the band between the hook text and the captions (packages/video/src/ShortVideo.tsx). */
 export const SHORT_MOTION_SIZE = { width: 1080, height: 730 };
 
@@ -124,12 +198,19 @@ export async function renderMotionClips(ctx: StepContext): Promise<void> {
   }
 
   const accents = channelAccents();
+  const timings = readJson<Timings>(ctx, "timings.json");
   let rendered = 0;
   let failed = 0;
   for (const { s, i } of targets) {
     // The first scene also covers the silence before the narration.
-    const duration = s.end - s.start + (i === 0 ? NARRATION_LEAD_IN_SEC : 0) + TAIL_SEC;
-    const job = motionJob(s, duration, accents);
+    const lead = i === 0 ? NARRATION_LEAD_IN_SEC : 0;
+    const duration = s.end - s.start + lead + TAIL_SEC;
+    // Spoken words during the scene, in clip time, so items appear as they are named.
+    const words = timings.words
+      .filter((w) => w.start >= s.start - 0.05 && w.start < s.end)
+      .map((w) => ({ ...w, start: w.start - s.start + lead, end: w.end - s.start + lead }));
+    const base = motionJob(s, duration, accents);
+    const job = base && withCues(base, words);
     if (!job) {
       ctx.log(`Scene ${i + 1} (${s.type}): not enough data for an animation, using the built-in card`, "warn");
       continue;

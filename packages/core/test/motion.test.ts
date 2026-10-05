@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { motionJob, parseStat } from "../src/steps/motion";
+import { cueTimes, motionJob, parseStat, withCues } from "../src/steps/motion";
 import { graphicValues } from "../src/providers/motion";
 import type { PlannedScene } from "../src/types";
 
@@ -89,5 +89,34 @@ describe("graphic scenes", () => {
   it("rejects odd template ids and empty values", () => {
     expect(motionJob(scene({ type: "graphic", graphic: { template: "../x", values: { a: "b" } } }), 6, accents)).toBeNull();
     expect(motionJob(scene({ type: "graphic", graphic: { template: "ranking", values: { title: " " } } }), 6, accents)).toBeNull();
+  });
+});
+
+describe("narration cues", () => {
+  const say = (text: string, start = 0, step = 0.4) => text.split(" ").map((t, i) => ({ text: t, start: start + i * step, end: start + i * step + 0.3 }));
+
+  it("finds when each item is named, in order, matching word stems", () => {
+    // "The script, the voice, the screen recording, the captions, even the thumbnail" from 1 s
+    const words = say("The script, the voice, the screen recording, the captions, even the thumbnail.", 1);
+    expect(cueTimes(["Script", "Voice", "Screen recording", "Captions", "Thumbnails"], words, 11)).toEqual([1.4, 2.2, 3, 4.2, 5.4]);
+  });
+
+  it("spaces unnamed items between named ones and returns null when most are missing", () => {
+    const words = say("first comes alpha then something then gamma", 0, 1);
+    expect(cueTimes(["Alpha", "Beta", "Gamma"], words, 10)).toEqual([2, 4, 6]);
+    expect(cueTimes(["Alpha", "Beta", "Delta"], words, 10)).toBeNull();
+  });
+
+  it("keeps cues inside the clip and apart", () => {
+    const words = say("one two", 0, 0.1);
+    expect(cueTimes(["one", "two"], words, 1)).toEqual([0.3, 0.4]);
+  });
+
+  it("adds cues only to templates that reveal items one by one", () => {
+    const words = say("we fetch it then write it then voice it", 0, 0.5);
+    const steps = withCues({ template: "steps", values: { duration: 8, steps: "search | Fetch | x\nfile | Write\nmic | Voice" } }, words);
+    expect(steps.values.cues).toBe("0.5,2,3.5");
+    const ring = withCues({ template: "ring", values: { duration: 8, value: "73%" } }, words);
+    expect(ring.values.cues).toBeUndefined();
   });
 });
