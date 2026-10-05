@@ -9,6 +9,12 @@ import type { Article, ClipInfo, PlannedScene, Timings } from "../types";
 import { planDemoScenes } from "../demo/project";
 import { graphicTemplates, graphicValues, motionDir } from "../providers/motion";
 
+/** A timeline needs at least three events at different dates; one date with three things is not a timeline. */
+export function isRealTimeline(events: { when: string; what: string }[] | null | undefined): boolean {
+  const dates = new Set((events ?? []).filter((e) => e.what?.trim()).map((e) => e.when.trim().toLowerCase()).filter(Boolean));
+  return dates.size >= 3;
+}
+
 /** Default average scene length; templates can set their own (sceneSeconds). */
 const TARGET_SCENE_SEC = 7;
 
@@ -26,9 +32,14 @@ const ScenesSchema = z.object({
       clipStart: z.number().nullable().describe("For clip scenes: where to start in the recording, seconds"),
       clipEnd: z.number().nullable().describe("For clip scenes: where to stop in the recording, seconds"),
       events: z
-        .array(z.object({ when: z.string().describe("Year or date, e.g. 2023 or Mar 2025"), what: z.string().describe("Max 4 words") }))
+        .array(
+          z.object({
+            when: z.string().describe("The date or year exactly as the narration says it (e.g. 2023, March 2025, September 3); never add a year or day it doesn't say"),
+            what: z.string().describe("Max 4 words"),
+          }),
+        )
         .nullable()
-        .describe("For timeline scenes: 3-6 events in chronological order. Otherwise null"),
+        .describe("For timeline scenes: 3-6 events at different dates, in chronological order. Otherwise null"),
       compare: z
         .object({
           left: z.string().describe("Short name of the first side, 1-2 words"),
@@ -106,8 +117,9 @@ Scene types:
 - article: shows an image from the source article with a caption in text.
 ${
   motion
-    ? `- timeline: an animated timeline. text = short headline (max 6 words), events = 3-6 dated events from the narration.
-  Use when the narration walks through how something developed over time (releases, funding rounds, a history).
+    ? `- timeline: an animated timeline. text = short headline (max 6 words), events = 3-6 events from the narration, each at a different date.
+  Use only when the narration itself names at least three different dates or years (releases, funding rounds, a history).
+  Write each date exactly as spoken: if it says "September third", write "Sep 3", never add the year.
 - compare: two things side by side. text = short headline, compare = the two names and 2-4 rows of values from the narration.
   Use when the narration contrasts two products, models or companies on concrete points.
 ${
@@ -147,7 +159,7 @@ ${sentences.map((s) => `[${s.index}] ${s.start.toFixed(1)}-${s.end.toFixed(1)}: 
       if (s.type === "timeline" || s.type === "compare") {
         const data =
           s.type === "timeline"
-            ? s.events?.length ? { events: s.events } : undefined
+            ? isRealTimeline(s.events) ? { events: s.events! } : undefined
             : s.compare?.rows.length ? { left: s.compare.left, right: s.compare.right, rows: s.compare.rows } : undefined;
         // Picked without Motion or without facts: a title card says the same in words.
         return motion && data ? { ...scene, motion: data } : { ...scene, type: "title" as const };
