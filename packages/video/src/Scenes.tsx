@@ -4,27 +4,51 @@ import type { VideoScene } from "./types";
 import { useTheme } from "./theme";
 import { cameraAt } from "./camera";
 
-/** Slow zoom/pan so still images feel alive. Direction alternates per scene. */
-const KenBurns: React.FC<{ src: string; index: number; blur?: boolean }> = ({ src, index, blur }) => {
+/**
+ * Slow zoom/pan so still images feel alive. Direction alternates per scene.
+ * "card": behind title/quote/stat cards. Photos come in every brightness (a near-white one went flat grey), so,
+ * like the thumbnails, they are turned grey, darkened and re-tinted in the channel colors, with dark edges.
+ * "hook": the opening card. Less blur so the picture still reads, a faster push-in and a light sweep.
+ */
+const KenBurns: React.FC<{ src: string; index: number; grade?: "card" | "hook" }> = ({ src, index, grade }) => {
   const theme = useTheme();
   const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
   const p = frame / Math.max(1, durationInFrames);
-  const zoomIn = index % 2 === 0;
-  const scale = zoomIn ? 1.05 + 0.1 * p : 1.15 - 0.1 * p;
+  const hook = grade === "hook";
+  const zoomIn = hook || index % 2 === 0;
+  const scale = hook ? 1.02 + 0.2 * p : zoomIn ? 1.05 + 0.1 * p : 1.15 - 0.1 * p;
   const dx = (index % 3 === 0 ? -1 : 1) * 30 * p;
+  const filter =
+    grade === "hook"
+      ? "blur(4px) grayscale(1) contrast(1.6) brightness(0.4)"
+      : grade === "card"
+        ? "blur(22px) grayscale(1) contrast(1.3) brightness(0.42)"
+        : undefined;
+  // A soft band of light that crosses the frame once in the first two seconds of the hook.
+  const sweep = interpolate(frame, [4, 60], [-40, 140], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   return (
     <AbsoluteFill style={{ overflow: "hidden", backgroundColor: theme.bg }}>
       <Img
         src={src}
-        style={{
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          transform: `scale(${scale}) translateX(${dx}px)`,
-          filter: blur ? "blur(24px) brightness(0.45)" : undefined,
-        }}
+        style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${scale}) translateX(${dx}px)`, filter }}
       />
+      {grade ? (
+        <>
+          <AbsoluteFill
+            style={{ background: `linear-gradient(150deg, ${theme.accent} 0%, ${theme.accentDeep} 55%, ${theme.accent2} 110%)`, mixBlendMode: "color" }}
+          />
+          <AbsoluteFill style={{ background: "radial-gradient(ellipse 75% 70% at 50% 50%, transparent 35%, #000000d0 100%)" }} />
+        </>
+      ) : null}
+      {hook ? (
+        <AbsoluteFill
+          style={{
+            background: `linear-gradient(105deg, transparent ${sweep - 18}%, ${theme.accent2}55 ${sweep}%, transparent ${sweep + 18}%)`,
+            mixBlendMode: "screen",
+          }}
+        />
+      ) : null}
     </AbsoluteFill>
   );
 };
@@ -44,11 +68,13 @@ const Backdrop: React.FC<{ index: number }> = ({ index }) => {
   );
 };
 
-const FadeIn: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const FadeIn: React.FC<{ children: React.ReactNode; punch?: boolean }> = ({ children, punch }) => {
   const frame = useCurrentFrame();
   const opacity = interpolate(frame, [0, 8], [0, 1], { extrapolateRight: "clamp" });
   const y = interpolate(frame, [0, 12], [30, 0], { extrapolateRight: "clamp" });
-  return <div style={{ opacity, transform: `translateY(${y}px)` }}>{children}</div>;
+  // The hook's headline lands with a quick zoom instead of drifting up.
+  const scale = punch ? interpolate(frame, [0, 10], [1.25, 1], { extrapolateRight: "clamp" }) : 1;
+  return <div style={{ opacity, transform: punch ? `scale(${scale})` : `translateY(${y}px)` }}>{children}</div>;
 };
 
 const Credit: React.FC<{ credit?: string }> = ({ credit }) => {
@@ -137,8 +163,10 @@ const ClipScene: React.FC<{ scene: VideoScene; index: number }> = ({ scene, inde
 
 export const SceneView: React.FC<{ scene: VideoScene; index: number }> = ({ scene, index }) => {
   const theme = useTheme();
+  // The opening title card is the hook: it gets a livelier background and a punchier headline.
+  const hook = index === 0 && scene.type === "title";
   const bg = scene.image ? (
-    <KenBurns src={scene.image} index={index} blur={scene.type !== "broll"} />
+    <KenBurns src={scene.image} index={index} grade={scene.type === "broll" ? undefined : hook ? "hook" : "card"} />
   ) : (
     <Backdrop index={index} />
   );
@@ -178,9 +206,11 @@ export const SceneView: React.FC<{ scene: VideoScene; index: number }> = ({ scen
         <AbsoluteFill>
           {bg}
           <AbsoluteFill style={center}>
-            <FadeIn>
+            <FadeIn punch={hook}>
               <div style={{ width: 120, height: 8, background: theme.accent, margin: "0 auto 40px", borderRadius: 4 }} />
-              <div style={{ fontSize: 92, fontWeight: 800, lineHeight: 1.1, letterSpacing: -1 }}>{scene.text}</div>
+              <div style={{ fontSize: hook ? 104 : 92, fontWeight: 800, lineHeight: 1.1, letterSpacing: -1, textShadow: hook ? "0 8px 40px #000c" : undefined }}>
+                {scene.text}
+              </div>
             </FadeIn>
           </AbsoluteFill>
         </AbsoluteFill>
