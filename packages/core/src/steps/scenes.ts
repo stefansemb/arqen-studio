@@ -117,7 +117,7 @@ ${
 ${graphics.map((g) => `  - ${g.id}: ${g.description} Use when: ${g.use}\n    Fields: ${g.fields.map((f) => `${f.id} (${f.hint})`).join("; ")}`).join("\n")}
 `
           : ""
-      }Only use timeline/compare${graphics.length ? "/graphic" : ""} when the narration itself gives the facts; never invent dates or values. At most one of each per video.
+      }Only use timeline/compare${graphics.length ? "/graphic" : ""} when the narration itself gives the facts; never invent dates or values. At most one of each per video${graphics.length ? " (for graphic: one per template, at most 3 graphics in total)" : ""}.
 `
     : ""
 }${template.sceneGuidance}`,
