@@ -63,6 +63,18 @@ export interface ThumbnailVariant extends ThumbnailText {
 
 export const YT = { titleMax: 100, titleIdeal: 70, descriptionMax: 5000, tagsMax: 500, chapterMinSec: 10, chaptersMin: 3 };
 
+/**
+ * The channel writes without em and en dashes. A dash used as punctuation becomes `joiner` (": " suits titles,
+ * ", " running text); a dash between numbers ("2024–2026") becomes a hyphen. Pure.
+ */
+export function stripDashes(text: string, joiner = ", "): string {
+  return text
+    .replace(/(\d)\s*[\u2013\u2014]\s*(\d)/g, "$1-$2")
+    .replace(/\s*[\u2013\u2014]\s*/g, joiner)
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 /** 75.4 → "1:15", 3725 → "1:02:05" (YouTube chapter format). */
 export function formatTimestamp(sec: number): string {
   const s = Math.max(0, Math.floor(sec));
@@ -125,7 +137,7 @@ export function composeDescription(parts: {
   const sourceLines = parts.sources?.length
     ? ["Sources:", ...parts.sources.map((s) => `- ${s.title}: ${s.url}`)].join("\n")
     : parts.sourceUrl
-      ? `Source: ${parts.sourceName ? `${parts.sourceName} – ` : ""}${parts.sourceUrl}`
+      ? `Source: ${parts.sourceName ? `${parts.sourceName}, ` : ""}${parts.sourceUrl}`
       : "";
   const stock = parts.stockSources?.length ? parts.stockSources : parts.stockCredit ? ["Pexels"] : [];
   const credits = [

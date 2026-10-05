@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildChapters, composeDescription, fitTags, formatTimestamp } from "../src/publish";
+import { buildChapters, composeDescription, fitTags, formatTimestamp, stripDashes } from "../src/publish";
 import type { Script, Word } from "../src/types";
 
 describe("formatTimestamp", () => {
@@ -59,7 +59,7 @@ describe("composeDescription", () => {
       hashtags: ["AI", "#news"],
     });
     expect(d).toBe(
-      "What happened.\n\nChapters\n0:00 Intro\n1:05 Why it matters\n\nSource: Example News – https://example.com/a\nStock images: Pexels\n\nSubscribe!\n\n#AI #news",
+      "What happened.\n\nChapters\n0:00 Intro\n1:05 Why it matters\n\nSource: Example News, https://example.com/a\nStock images: Pexels\n\nSubscribe!\n\n#AI #news",
     );
   });
 });
@@ -86,5 +86,14 @@ describe("composeDescription with several sources", () => {
       hashtags: [],
     });
     expect(d).toBe("Roundup.\n\nSources:\n- Story A: https://a.com/1\n- Story B: https://b.com/2");
+  });
+});
+
+describe("stripDashes", () => {
+  it("turns punctuation dashes into the joiner and number ranges into hyphens", () => {
+    expect(stripDashes("Opus 5.5 Beats Astra on Coding — For Half the Price", ": ")).toBe("Opus 5.5 Beats Astra on Coding: For Half the Price");
+    expect(stripDashes("Fast–and cheap")).toBe("Fast, and cheap");
+    expect(stripDashes("Benchmarks 2024–2026 compared")).toBe("Benchmarks 2024-2026 compared");
+    expect(stripDashes("No dashes here")).toBe("No dashes here");
   });
 });

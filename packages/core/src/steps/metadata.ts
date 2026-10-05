@@ -6,7 +6,7 @@ import { generateStructured } from "../llm";
 import { readJson, writeJson, type StepContext } from "../context";
 import { channelName } from "../channels";
 import { SOURCE_NAMES } from "../providers/images";
-import { buildChapters, composeDescription, fitTags, YT, type PublishInfo } from "../publish";
+import { buildChapters, composeDescription, fitTags, stripDashes, YT, type PublishInfo } from "../publish";
 import { getTemplate } from "../templates";
 import { readAppSettings } from "../settings";
 import type { Article, PlannedScene, Script, Timings } from "../types";
@@ -64,6 +64,7 @@ export async function generateMetadata(ctx: StepContext): Promise<void> {
 Titles: under ${YT.titleIdeal} characters, specific and curiosity-driven, front-load the most interesting words. Never promise
 anything the video does not deliver, no ALL CAPS titles, at most one emoji. Vary the angle across options (outcome, question, number, contrarian, how-to).
 Description summary: first sentence works as a search snippet; plain language; no "In this video".
+Never use em dashes or en dashes anywhere (titles, description, chapters, thumbnail text, comment): use a colon, a comma or a new sentence instead.
 ${template.packaging ?? DEFAULT_PACKAGING}${
       gestures.length
         ? `\nThumbnail gesture: the presenter stands on the right, next to the text. The FIRST option is the one used, and its gesture should be thinking unless another gesture clearly fits better: thinking suits most news, analysis, AI safety and legal twists.
@@ -85,9 +86,10 @@ ${script.hook ? `Hook: ${script.hook}\n` : ""}${script.cta ? `CTA: ${script.cta}
   const intro = (app.intro.enabled ? app.intro.seconds : 0) + NARRATION_LEAD_IN_SEC;
   const outro = app.outro.enabled ? app.outro.seconds : 0;
   const shifted = timings.words.map((w) => ({ ...w, start: w.start + intro, end: w.end + intro }));
-  const chapters = buildChapters(script, shifted, m.chapterTitles, intro + timings.durationSec + outro);
+  // The model still slips in dashes now and then; the channel style has none.
+  const chapters = buildChapters(script, shifted, m.chapterTitles.map((t) => stripDashes(t, ": ")), intro + timings.durationSec + outro);
   const hashtags = m.hashtags.slice(0, 3).map((h) => h.replace(/^#/, "").replace(/\s+/g, ""));
-  const titles = m.titles.map((t) => t.trim()).filter(Boolean).slice(0, 5);
+  const titles = m.titles.map((t) => stripDashes(t, ": ")).filter(Boolean).slice(0, 5);
   const previous = readPublish(ctx.dir);
   // Image sources in order of first use (older scenes.json files have no source field).
   const usedSources = [...new Set(scenes.map((sc) => sc.source).filter((n): n is string => Boolean(n)))];
@@ -95,7 +97,7 @@ ${script.hook ? `Hook: ${script.hook}\n` : ""}${script.cta ? `CTA: ${script.cta}
     titles,
     title: titles[0] ?? script.title,
     description: composeDescription({
-      summary: m.summary,
+      summary: stripDashes(m.summary),
       chapters,
       sourceUrl: article.url || undefined,
       sourceName: article.siteName || undefined,
@@ -110,11 +112,11 @@ ${script.hook ? `Hook: ${script.hook}\n` : ""}${script.cta ? `CTA: ${script.cta}
     hashtags,
     chapters,
     thumbnailTexts: m.thumbnailTexts.slice(0, 3).map((t) => ({
-      text: t.text.trim(),
+      text: stripDashes(t.text, " "),
       highlight: t.highlight.trim(),
       ...(gestures.includes(t.gesture.trim()) ? { gesture: t.gesture.trim() } : {}),
     })),
-    comment: m.commentQuestion.trim(),
+    comment: stripDashes(m.commentQuestion),
     // Keep existing thumbnails until the thumbnail step replaces them.
     thumbnails: previous?.thumbnails ?? [],
     selectedThumbnail: previous?.selectedThumbnail ?? 0,

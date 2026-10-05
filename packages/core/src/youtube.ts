@@ -467,6 +467,21 @@ export async function postComment(videoId: string, text: string): Promise<string
 }
 
 /**
+ * Changes an uploaded video's title and/or description. videos.update replaces the whole snippet, so the
+ * current one is read and its other writable fields (tags, category, languages) are sent back unchanged.
+ */
+export async function updateVideoText(videoId: string, text: { title?: string; description?: string }): Promise<void> {
+  const cur = await api("GET", `videos?part=snippet&id=${encodeURIComponent(videoId)}`);
+  if (!cur.ok) throw await apiError(cur, "Reading the video");
+  const snippet = ((await cur.json()) as { items?: { snippet: Record<string, unknown> }[] }).items?.[0]?.snippet;
+  if (!snippet) throw new YouTubeError("The video was not found on the channel.");
+  const keep = ["description", "tags", "categoryId", "defaultLanguage", "defaultAudioLanguage"];
+  const writable = Object.fromEntries(Object.entries(snippet).filter(([k]) => keep.includes(k)));
+  const res = await api("PUT", "videos?part=snippet", { id: videoId, snippet: { ...writable, title: snippet.title, ...text } });
+  if (!res.ok) throw await apiError(res, "Updating the video's title and description");
+}
+
+/**
  * Cancels a scheduled or public video: it becomes private with no publish time. videos.update
  * replaces the whole status part, so the current status is read and its writable fields kept.
  */
