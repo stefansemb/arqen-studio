@@ -62,6 +62,13 @@ export function motionJob(scene: PlannedScene, durationSec: number, accents: { a
         },
       };
     }
+    case "graphic": {
+      const g = scene.graphic;
+      if (!g || !/^[a-z0-9-]+$/.test(g.template)) return null;
+      const values = Object.fromEntries(Object.entries(g.values).filter(([, v]) => typeof v === "string" && v.trim()));
+      if (!Object.keys(values).length) return null;
+      return { template: g.template, values: { ...base, ...values } };
+    }
     default:
       return null;
   }

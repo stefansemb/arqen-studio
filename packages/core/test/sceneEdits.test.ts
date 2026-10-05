@@ -76,3 +76,20 @@ describe("applySceneEdits graphics", () => {
     expect(t.type).toBe("title");
   });
 });
+
+describe("applySceneEdits graphic templates", () => {
+  const base: PlannedScene[] = [{ start: 0, end: 5, type: "title", text: "Old" }];
+
+  it("stores the template and its filled fields, using title as the scene text", () => {
+    const [s] = applySceneEdits(base, [], [{ index: 0, type: "graphic", graphic: { template: "ranking", values: { title: "Top 5", items: "A | 1", empty: " " } } }]);
+    expect(s).toMatchObject({ type: "graphic", text: "Top 5", graphic: { template: "ranking", values: { title: "Top 5", items: "A | 1" } } });
+  });
+
+  it("rejects bad template ids and empty graphics, and clears the graphic when switching away", () => {
+    expect(() => applySceneEdits(base, [], [{ index: 0, type: "graphic", graphic: { template: "../x", values: { a: "b" } } }])).toThrow(/unknown/);
+    expect(() => applySceneEdits(base, [], [{ index: 0, type: "graphic", graphic: { template: "ranking", values: {} } }])).toThrow(/fill in/);
+    const [g] = applySceneEdits(base, [], [{ index: 0, type: "graphic", graphic: { template: "ranking", values: { title: "T" } } }]);
+    const [t] = applySceneEdits([g], [], [{ index: 0, type: "title", text: "Back" }]);
+    expect(t.graphic).toBeUndefined();
+  });
+});

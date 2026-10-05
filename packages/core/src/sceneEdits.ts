@@ -11,9 +11,9 @@ export interface SceneEdit {
   /**
    * "clip" needs `clip`; "broll" is only allowed when the scene already has an image.
    * Graphics: "stat" needs text + sub (the number), "quote" text (+ sub = who), "timeline" motion.events,
-   * "compare" motion.left/right/rows.
+   * "compare" motion.left/right/rows, "graphic" graphic (a further Motion template and its field values).
    */
-  type: "clip" | "title" | "broll" | "stat" | "quote" | "timeline" | "compare";
+  type: "clip" | "title" | "broll" | "stat" | "quote" | "timeline" | "compare" | "graphic";
   clip?: string;
   clipStart?: number;
   clipEnd?: number;
@@ -24,9 +24,11 @@ export interface SceneEdit {
   sub?: string;
   /** "timeline" / "compare" facts. */
   motion?: MotionData;
+  /** "graphic": template id and field values. */
+  graphic?: { template: string; values: Record<string, string> };
 }
 
-const NO_CLIP = { clip: undefined, clipStart: undefined, clipEnd: undefined, zoom: undefined };
+const NO_CLIP = { clip: undefined, clipStart: undefined, clipEnd: undefined, zoom: undefined, graphic: undefined };
 const short = (s: unknown, max: number) => (typeof s === "string" ? s.trim().slice(0, max) : "");
 
 /**
@@ -63,6 +65,7 @@ export function applySceneEdits(scenes: PlannedScene[], clips: ClipInfo[], edits
         zoom: e.zoom === false ? false : undefined,
         sub: undefined,
         motion: undefined,
+        graphic: undefined,
       });
     } else if (e.type === "broll") {
       if (!s.asset) throw new Error(`${label}: has no B-roll image to switch back to`);
@@ -94,6 +97,16 @@ export function applySceneEdits(scenes: PlannedScene[], clips: ClipInfo[], edits
       if (!left || !right) throw new Error(`${label}: a comparison needs both names`);
       if (!rows.length) throw new Error(`${label}: a comparison needs at least 1 row`);
       Object.assign(s, { type: "compare", text, sub: undefined, ...NO_CLIP, motion: { left, right, rows } });
+    } else if (e.type === "graphic") {
+      const template = e.graphic?.template ?? "";
+      if (!/^[a-z0-9-]+$/.test(template)) throw new Error(`${label}: unknown graphic template "${template}"`);
+      const values = Object.fromEntries(
+        Object.entries(e.graphic?.values ?? {})
+          .map(([k, v]) => [k, short(v, 600)] as const)
+          .filter(([k, v]) => /^[A-Za-z0-9_-]+$/.test(k) && v),
+      );
+      if (!Object.keys(values).length) throw new Error(`${label}: fill in the graphic's fields`);
+      Object.assign(s, { type: "graphic", text: values.title ?? text, sub: undefined, ...NO_CLIP, motion: undefined, graphic: { template, values } });
     } else {
       throw new Error(`${label}: unsupported type "${(e as { type: string }).type}"`);
     }

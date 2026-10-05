@@ -1,7 +1,7 @@
 import type { CameraKey } from "./camera";
 import type { ThemeOverrides } from "./theme";
 
-export type SceneType = "broll" | "title" | "quote" | "stat" | "article" | "clip" | "timeline" | "compare";
+export type SceneType = "broll" | "title" | "quote" | "stat" | "article" | "clip" | "timeline" | "compare" | "graphic";
 
 export interface VideoScene {
   start: number; // seconds

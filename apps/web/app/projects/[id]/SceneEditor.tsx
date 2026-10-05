@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import type { SceneEdit } from "@yta/core/sceneEdits";
 import { fitClip, MAX_CLIP_RATE } from "@yta/core/timing";
 import type { MotionData } from "@yta/core/sceneEdits";
+import type { GraphicTemplate } from "@yta/core/motion";
 
 export interface EditorScene {
   start: number;
@@ -17,6 +18,7 @@ export interface EditorScene {
   zoom?: boolean;
   sub?: string;
   motion?: MotionData;
+  graphic?: { template: string; values: Record<string, string> };
 }
 
 export interface EditorClip {
@@ -27,6 +29,7 @@ export interface EditorClip {
 
 /** The edit that represents a scene as it is saved now, used as the starting point for a draft. */
 export function editFromScene(scene: EditorScene, index: number): SceneEdit {
+  if (scene.type === "graphic" && scene.graphic) return { index, type: "graphic", text: scene.text, graphic: scene.graphic };
   if (scene.type === "stat" || scene.type === "quote" || scene.type === "timeline" || scene.type === "compare") {
     return { index, type: scene.type, text: scene.text, sub: scene.sub, motion: scene.motion };
   }
@@ -46,7 +49,7 @@ const GRAPHICS = [
   { value: "compare", label: "Comparison" },
 ] as const;
 type GraphicsType = (typeof GRAPHICS)[number]["value"];
-const isGraphics = (t: string): t is GraphicsType => GRAPHICS.some((g) => g.value === t);
+const isGraphics = (t: string): t is GraphicsType | "graphic" => t === "graphic" || GRAPHICS.some((g) => g.value === t);
 
 /** Rows of "a | b | c" text, kept raw while typing so spaces around separators don't vanish. */
 const toLines = (rows: string[][]) => rows.map((r) => r.join(" | ")).join("\n");
@@ -61,10 +64,12 @@ export function SceneEditor(props: {
   index: number;
   scene: EditorScene;
   clips: EditorClip[];
+  /** Further Arqen Motion templates (from Motion's own list), shown as "Graphic: <id>". */
+  graphics: GraphicTemplate[];
   draft: SceneEdit | undefined;
   onChange: (edit: SceneEdit | undefined) => void;
 }) {
-  const { scene, clips, index } = props;
+  const { scene, clips, graphics, index } = props;
   const video = useRef<HTMLVideoElement>(null);
   const edit = props.draft ?? editFromScene(scene, index);
   const clip = edit.type === "clip" ? clips.find((c) => c.id === edit.clip) : undefined;
@@ -85,6 +90,10 @@ export function SceneEditor(props: {
         clipEnd: keepRange ? edit.clipEnd : round(Math.min(c.durationSec, sceneSec)),
         text: edit.type === "broll" ? "" : edit.text,
       });
+    } else if (value.startsWith("graphic:")) {
+      const id = value.slice(8);
+      const keep = edit.type === "graphic" && edit.graphic?.template === id ? edit.graphic.values : {};
+      update({ type: "graphic", clip: undefined, clipStart: undefined, clipEnd: undefined, graphic: { template: id, values: keep } });
     } else if (isGraphics(value)) {
       update({ type: value, clip: undefined, clipStart: undefined, clipEnd: undefined, text: edit.type === "broll" ? "" : edit.text });
     } else {
@@ -124,7 +133,7 @@ export function SceneEditor(props: {
         <select
           className="input"
           style={{ flex: "none", minWidth: 280 }}
-          value={edit.type === "clip" ? `clip:${edit.clip}` : edit.type}
+          value={edit.type === "clip" ? `clip:${edit.clip}` : edit.type === "graphic" ? `graphic:${edit.graphic?.template}` : edit.type}
           onChange={(e) => choose(e.target.value)}
         >
           {clips.map((c) => (
@@ -138,6 +147,15 @@ export function SceneEditor(props: {
               {g.label}
             </option>
           ))}
+          {graphics.map((g) => (
+            <option key={g.id} value={`graphic:${g.id}`}>
+              Graphic: {g.id}
+            </option>
+          ))}
+          {/* A graphic whose template Motion no longer lists stays selectable as it is. */}
+          {edit.type === "graphic" && edit.graphic && !graphics.some((g) => g.id === edit.graphic!.template) ? (
+            <option value={`graphic:${edit.graphic.template}`}>Graphic: {edit.graphic.template}</option>
+          ) : null}
           {scene.asset ? <option value="broll">B-roll image</option> : null}
         </select>
       </div>
@@ -232,7 +250,7 @@ export function SceneEditor(props: {
             <input className="input" placeholder="Name, role" value={edit.sub ?? ""} maxLength={80} onChange={(e) => update({ sub: e.target.value })} />
           </div>
         </>
-      ) : edit.type !== "broll" ? (
+      ) : edit.type !== "broll" && edit.type !== "graphic" ? (
         <div className="row">
           <span className="label">{edit.type === "clip" || edit.type === "stat" ? "Label" : edit.type === "title" ? "Text" : "Headline"}</span>
           <input
@@ -301,13 +319,32 @@ export function SceneEditor(props: {
         </>
       ) : null}
 
+      {edit.type === "graphic"
+        ? (graphics.find((g) => g.id === edit.graphic?.template)?.fields ?? []).map((field) => {
+            const value = edit.graphic?.values[field.id] ?? "";
+            const set = (v: string) => update({ graphic: { template: edit.graphic!.template, values: { ...edit.graphic!.values, [field.id]: v } } });
+            return (
+              <div key={field.id} className="row" style={field.ui === "textarea" ? { alignItems: "flex-start" } : undefined}>
+                <span className="label">{field.id}</span>
+                {field.ui === "textarea" ? (
+                  <textarea className="input" rows={5} placeholder={field.hint} value={value} maxLength={600} onChange={(e) => set(e.target.value)} />
+                ) : (
+                  <input className="input" placeholder={field.hint} value={value} maxLength={600} onChange={(e) => set(e.target.value)} />
+                )}
+              </div>
+            );
+          })
+        : null}
+
       {isGraphics(edit.type) ? (
         <div className="muted" style={{ fontSize: 12 }}>
           {edit.type === "timeline"
             ? "One event per line: when | what (2-7 events). "
             : edit.type === "compare"
               ? "One row per line: label | left | right (up to 5). Numeric rows get bars. "
-              : ""}
+              : edit.type === "graphic"
+                ? `${graphics.find((g) => g.id === edit.graphic?.template)?.description ?? ""} `
+                : ""}
           Animated with Arqen Motion when the video renders; without it a built-in card is shown.
         </div>
       ) : null}

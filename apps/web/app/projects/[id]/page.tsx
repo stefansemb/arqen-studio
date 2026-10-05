@@ -8,6 +8,7 @@ import type { EventRow, ProjectRow } from "@yta/core/db";
 import { isSkipped, STEP_LABELS, STEP_NAMES, type StepName } from "@yta/core/steps";
 import type { SceneEdit } from "@yta/core/sceneEdits";
 import type { MotionData } from "@yta/core/sceneEdits";
+import type { GraphicTemplate } from "@yta/core/motion";
 import { SceneEditor } from "./SceneEditor";
 import { ScriptPanel } from "./ScriptPanel";
 import { PublishPanel } from "./PublishPanel";
@@ -24,7 +25,7 @@ interface Detail {
   script: { title: string; hook: string; segments: { heading: string; text: string }[]; cta: string } | null;
   scriptCheck: { ok: boolean; wordCount: number; issues: { severity: string; claim: string; problem: string }[] } | null;
   scenes:
-    | { start: number; end: number; type: string; text: string; sub?: string; asset?: string; clip?: string; clipStart?: number; clipEnd?: number; zoom?: boolean; motion?: MotionData }[]
+    | { start: number; end: number; type: string; text: string; sub?: string; asset?: string; clip?: string; clipStart?: number; clipEnd?: number; zoom?: boolean; motion?: MotionData; graphic?: { template: string; values: Record<string, string> } }[]
     | null;
   clips:
     | { id: string; original: string; thumbnail: string; durationSec: number; summary: string; timeline: { start: number; end: number; description: string }[]; activity?: string }[]
@@ -32,6 +33,7 @@ interface Detail {
   settings: { zoom: ZoomSettings; voice?: VoiceChoice };
   publish: PublishInfo | null;
   previewProps: NewsVideoProps | null;
+  graphicTemplates?: GraphicTemplate[];
   output: { mtime: number; path: string } | null;
 }
 
@@ -230,6 +232,7 @@ export default function ProjectPage() {
                       index={selected}
                       scene={d.scenes[selected]}
                       clips={d.clips ?? []}
+                      graphics={d.graphicTemplates ?? []}
                       draft={drafts[selected]}
                       onChange={(edit) =>
                         setDrafts((prev) => {
@@ -281,6 +284,7 @@ export default function ProjectPage() {
                           <div className="type">
                             {s.type}
                             {s.clip && s.type === "clip" ? ` · ${s.clip}` : ""}
+                            {s.type === "graphic" && s.graphic ? ` · ${s.graphic.template}` : ""}
                           </div>
                           <div className="muted" style={{ fontSize: 11 }}>
                             {s.start.toFixed(1)}s{drafts[i] ? " · edited" : ""}

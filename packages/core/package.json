@@ -30,7 +30,8 @@
     "./shorts": "./src/shorts.ts",
     "./watcher": "./src/watcher.ts",
     "./telegram": "./src/telegram.ts",
-    "./ffmpeg": "./src/providers/ffmpeg.ts"
+    "./ffmpeg": "./src/providers/ffmpeg.ts",
+    "./motion": "./src/providers/motion.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",

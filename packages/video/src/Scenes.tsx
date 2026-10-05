@@ -172,6 +172,7 @@ export const SceneView: React.FC<{ scene: VideoScene; index: number }> = ({ scen
     // Without a rendered Arqen Motion clip, timelines and comparisons fall back to a title card.
     case "timeline":
     case "compare":
+    case "graphic":
     case "title":
       return (
         <AbsoluteFill>

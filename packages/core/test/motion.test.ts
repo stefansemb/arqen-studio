@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { motionJob, parseStat } from "../src/steps/motion";
+import { graphicValues } from "../src/providers/motion";
 import type { PlannedScene } from "../src/types";
 
 const accents = { accent: "#111111", accent2: "#222222" };
@@ -57,5 +58,36 @@ describe("motionJob", () => {
       accents,
     );
     expect(job?.values).toMatchObject({ leftName: "A", rightName: "B", rows: "Price | $15 | $10", title: "A vs B" });
+  });
+});
+
+describe("graphic scenes", () => {
+  const ranking = {
+    id: "ranking",
+    title: "Ranking",
+    description: "",
+    use: "lists",
+    fields: [
+      { id: "title", label: "", hint: "" },
+      { id: "items", label: "", hint: "", ui: "textarea" },
+    ],
+  };
+
+  it("keeps only the template's fields and needs all of them", () => {
+    expect(graphicValues(ranking, [{ field: "title", value: " Top " }, { field: "items", value: "A | 1" }, { field: "x", value: "y" }])).toEqual({
+      title: "Top",
+      items: "A | 1",
+    });
+    expect(graphicValues(ranking, [{ field: "title", value: "Top" }, { field: "items", value: " " }])).toBeNull();
+  });
+
+  it("maps a graphic scene to its template, keeping multiline values", () => {
+    const job = motionJob(scene({ type: "graphic", graphic: { template: "ranking", values: { title: "Top", items: "A | 1\nB | 2" } } }), 6, accents);
+    expect(job).toEqual({ template: "ranking", values: { duration: 6, source: "", ...accents, title: "Top", items: "A | 1\nB | 2" } });
+  });
+
+  it("rejects odd template ids and empty values", () => {
+    expect(motionJob(scene({ type: "graphic", graphic: { template: "../x", values: { a: "b" } } }), 6, accents)).toBeNull();
+    expect(motionJob(scene({ type: "graphic", graphic: { template: "ranking", values: { title: " " } } }), 6, accents)).toBeNull();
   });
 });

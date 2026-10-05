@@ -59,6 +59,8 @@ export interface PlannedScene {
   zoom?: boolean;
   /** Facts for "timeline" and "compare" scenes, filled in by the scene planner. */
   motion?: MotionData;
+  /** "graphic" scenes: a Motion template beyond the built-in four and its field values. */
+  graphic?: { template: string; values: Record<string, string> };
   /** Rendered Arqen Motion clip relative to the project dir, set by the motion step. */
   motionClip?: string;
   /** Local asset path relative to the project dir, set by the assets step. */

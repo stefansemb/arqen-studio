@@ -5,6 +5,7 @@ import { deleteProject, getProject, listEvents } from "@yta/core/db";
 import { projectDir } from "@yta/core/paths";
 import { buildVideoProps } from "@yta/core/props";
 import { readSettings } from "@yta/core/settings";
+import { graphicTemplates } from "@yta/core/motion";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     settings: readSettings(id),
     publish: readJson(dir, "publish.json"),
     previewProps: buildVideoProps(id, `/api/files/${id}`),
+    // Further Arqen Motion templates the scene editor can switch a scene to.
+    graphicTemplates: graphicTemplates(),
     output: fs.existsSync(output) ? { mtime: fs.statSync(output).mtimeMs, path: output } : null,
   });
 }

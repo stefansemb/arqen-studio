@@ -7,7 +7,7 @@ import { getTemplate } from "../templates";
 import { normalizeScenes, wordsToSentences } from "../timing";
 import type { Article, ClipInfo, PlannedScene, Timings } from "../types";
 import { planDemoScenes } from "../demo/project";
-import { motionDir } from "../providers/motion";
+import { graphicTemplates, graphicValues, motionDir } from "../providers/motion";
 
 /** Default average scene length; templates can set their own (sceneSeconds). */
 const TARGET_SCENE_SEC = 7;
@@ -16,7 +16,7 @@ const ScenesSchema = z.object({
   scenes: z.array(
     z.object({
       startSentence: z.number().int().describe("Index of the sentence where this scene begins"),
-      type: z.enum(["broll", "title", "quote", "stat", "article", "clip", "timeline", "compare"]),
+      type: z.enum(["broll", "title", "quote", "stat", "article", "clip", "timeline", "compare", "graphic"]),
       text: z
         .string()
         .describe("On-screen text: headline, quote, or stat label. For clip: a short step label or empty. Empty for broll."),
@@ -39,6 +39,13 @@ const ScenesSchema = z.object({
         })
         .nullable()
         .describe("For compare scenes. Otherwise null"),
+      graphic: z
+        .object({
+          template: z.string().describe("Template id from the graphics list"),
+          values: z.array(z.object({ field: z.string(), value: z.string() })).describe("One entry per field of the template"),
+        })
+        .nullable()
+        .describe("For graphic scenes. Otherwise null"),
     }),
   ),
 });
@@ -71,6 +78,8 @@ export async function planScenes(ctx: StepContext): Promise<void> {
   const articleImages = template.articleScenes === false ? 0 : article.images.length;
   // Timelines and comparisons need Arqen Motion; without it they would only be plain title cards.
   const motion = motionDir() !== null;
+  // Further Motion templates (e.g. a ranking), offered as "graphic" scenes; new templates appear here automatically.
+  const graphics = motion ? graphicTemplates() : [];
   ctx.log(`Planning ~${target} scenes over ${sentences.length} sentences${clips.length ? ` with ${clips.length} clip(s)` : ""}`);
 
   const clipRules = clips.length
@@ -101,13 +110,20 @@ ${
   Use when the narration walks through how something developed over time (releases, funding rounds, a history).
 - compare: two things side by side. text = short headline, compare = the two names and 2-4 rows of values from the narration.
   Use when the narration contrasts two products, models or companies on concrete points.
-Only use timeline/compare when the narration itself gives the facts; never invent dates or values. At most one of each per video.
+${
+        graphics.length
+          ? `- graphic: an animated graphic from the list below. graphic.template = its id, graphic.values = one entry per field.
+  text = a short label (e.g. the headline).
+${graphics.map((g) => `  - ${g.id}: ${g.description} Use when: ${g.use}\n    Fields: ${g.fields.map((f) => `${f.id} (${f.hint})`).join("; ")}`).join("\n")}
+`
+          : ""
+      }Only use timeline/compare${graphics.length ? "/graphic" : ""} when the narration itself gives the facts; never invent dates or values. At most one of each per video.
 `
     : ""
 }${template.sceneGuidance}`,
     prompt: `Plan about ${target} scenes (roughly one every ${sceneSec} seconds; never longer than ${clips.length ? 20 : Math.max(15, sceneSec + 6)} seconds).
 Scenes must be listed in order, the first must start at sentence 0, and each scene lasts until the next one starts.
-Avoid more than two card scenes (title/quote/stat${motion ? "/timeline/compare" : ""}) in a row. Don't repeat the same stock query.
+Avoid more than two card scenes (title/quote/stat${motion ? "/timeline/compare" : ""}${graphics.length ? "/graphic" : ""}) in a row. Don't repeat the same stock query.
 ${articleImages ? `The source article has ${articleImages} image(s) available for "article" scenes; use at most ${articleImages}.` : `There are no article images, so do not use "article" scenes.`}
 
 ${clipRules}
@@ -135,6 +151,12 @@ ${sentences.map((s) => `[${s.index}] ${s.start.toFixed(1)}-${s.end.toFixed(1)}: 
             : s.compare?.rows.length ? { left: s.compare.left, right: s.compare.right, rows: s.compare.rows } : undefined;
         // Picked without Motion or without facts: a title card says the same in words.
         return motion && data ? { ...scene, motion: data } : { ...scene, type: "title" as const };
+      }
+      if (s.type === "graphic") {
+        const template = graphics.find((g) => g.id === s.graphic?.template);
+        const values = template && s.graphic ? graphicValues(template, s.graphic.values) : null;
+        if (!template || !values) return { ...scene, type: "title" as const };
+        return { ...scene, text: values.title ?? scene.text, graphic: { template: template.id, values } };
       }
       // The model may still pick "article" against the rules; show an archive image instead.
       if (s.type === "article" && !articleImages) return { ...scene, type: "broll" as const, text: "", query: scene.query ?? scene.text };
