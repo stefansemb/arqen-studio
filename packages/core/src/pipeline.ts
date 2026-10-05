@@ -9,7 +9,6 @@ import { analyzeClips } from "./steps/clips";
 import { generateVoice } from "./steps/voice";
 import { planScenes } from "./steps/scenes";
 import { fetchAssets } from "./steps/assets";
-import { renderMotionClips } from "./steps/motion";
 import { renderVideo } from "./steps/render";
 import { generateMetadata } from "./steps/metadata";
 import { renderThumbnails } from "./steps/thumbnail";
@@ -24,7 +23,6 @@ const STEPS: Record<StepName, (ctx: StepContext) => Promise<void>> = {
   voice: generateVoice,
   scenes: planScenes,
   assets: fetchAssets,
-  motion: renderMotionClips,
   metadata: generateMetadata,
   thumbnail: renderThumbnails,
   render: renderVideo,

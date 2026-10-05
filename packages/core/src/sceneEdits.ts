@@ -1,20 +1,33 @@
 import fs from "node:fs";
 import path from "node:path";
 import { projectDir } from "./paths";
-import type { ClipInfo, PlannedScene } from "./types";
+import type { ClipInfo, MotionData, PlannedScene } from "./types";
+
+export type { MotionData };
 
 /** A user edit to one scene's visual. Timing (start/end) always stays tied to the narration. */
 export interface SceneEdit {
   index: number;
-  /** "clip" needs `clip`; "broll" is only allowed when the scene already has an image. */
-  type: "clip" | "title" | "broll";
+  /**
+   * "clip" needs `clip`; "broll" is only allowed when the scene already has an image.
+   * Graphics: "stat" needs text + sub (the number), "quote" text (+ sub = who), "timeline" motion.events,
+   * "compare" motion.left/right/rows.
+   */
+  type: "clip" | "title" | "broll" | "stat" | "quote" | "timeline" | "compare";
   clip?: string;
   clipStart?: number;
   clipEnd?: number;
   text?: string;
   /** Auto zoom on clip scenes (default on). */
   zoom?: boolean;
+  /** "stat": the number as shown (e.g. $40B); "quote": who said it. */
+  sub?: string;
+  /** "timeline" / "compare" facts. */
+  motion?: MotionData;
 }
+
+const NO_CLIP = { clip: undefined, clipStart: undefined, clipEnd: undefined, zoom: undefined };
+const short = (s: unknown, max: number) => (typeof s === "string" ? s.trim().slice(0, max) : "");
 
 /**
  * Applies edits to a scene list and returns the new list. Throws with a readable
@@ -28,7 +41,10 @@ export function applySceneEdits(scenes: PlannedScene[], clips: ClipInfo[], edits
     const s = out[e.index];
     if (!Number.isInteger(e.index) || !s) throw new Error(`Scene ${e.index + 1} does not exist`);
     const label = `Scene ${e.index + 1}`;
-    const text = typeof e.text === "string" ? e.text.trim().slice(0, 120) : s.text;
+    // The graphics clip no longer matches; the next render makes a new one (or reuses an identical one).
+    delete s.motionClip;
+    // Quotes can be a full sentence; other texts are labels and headlines.
+    const text = typeof e.text === "string" ? e.text.trim().slice(0, e.type === "quote" ? 300 : 120) : s.text;
 
     if (e.type === "clip") {
       const clip = e.clip ? clipById.get(e.clip) : undefined;
@@ -45,13 +61,39 @@ export function applySceneEdits(scenes: PlannedScene[], clips: ClipInfo[], edits
         text,
         query: undefined,
         zoom: e.zoom === false ? false : undefined,
+        sub: undefined,
+        motion: undefined,
       });
     } else if (e.type === "broll") {
       if (!s.asset) throw new Error(`${label}: has no B-roll image to switch back to`);
-      Object.assign(s, { type: "broll", text: "", clip: undefined, clipStart: undefined, clipEnd: undefined, zoom: undefined });
+      Object.assign(s, { type: "broll", text: "", ...NO_CLIP, sub: undefined, motion: undefined });
     } else if (e.type === "title") {
       if (!text) throw new Error(`${label}: a title card needs text`);
-      Object.assign(s, { type: "title", text, clip: undefined, clipStart: undefined, clipEnd: undefined, zoom: undefined });
+      Object.assign(s, { type: "title", text, ...NO_CLIP, sub: undefined, motion: undefined });
+    } else if (e.type === "stat") {
+      const sub = short(e.sub, 24);
+      if (!sub) throw new Error(`${label}: a number card needs a number`);
+      Object.assign(s, { type: "stat", text, sub, ...NO_CLIP, motion: undefined });
+    } else if (e.type === "quote") {
+      if (!text) throw new Error(`${label}: a quote card needs the quote`);
+      Object.assign(s, { type: "quote", text, sub: short(e.sub, 80) || undefined, ...NO_CLIP, motion: undefined });
+    } else if (e.type === "timeline") {
+      const events = (e.motion?.events ?? [])
+        .map((ev) => ({ when: short(ev.when, 20), what: short(ev.what, 60) }))
+        .filter((ev) => ev.when && ev.what)
+        .slice(0, 7);
+      if (events.length < 2) throw new Error(`${label}: a timeline needs at least 2 events`);
+      Object.assign(s, { type: "timeline", text, sub: undefined, ...NO_CLIP, motion: { events } });
+    } else if (e.type === "compare") {
+      const left = short(e.motion?.left, 30);
+      const right = short(e.motion?.right, 30);
+      const rows = (e.motion?.rows ?? [])
+        .map((r) => ({ label: short(r.label, 30), left: short(r.left, 20), right: short(r.right, 20) }))
+        .filter((r) => r.label && (r.left || r.right))
+        .slice(0, 5);
+      if (!left || !right) throw new Error(`${label}: a comparison needs both names`);
+      if (!rows.length) throw new Error(`${label}: a comparison needs at least 1 row`);
+      Object.assign(s, { type: "compare", text, sub: undefined, ...NO_CLIP, motion: { left, right, rows } });
     } else {
       throw new Error(`${label}: unsupported type "${(e as { type: string }).type}"`);
     }

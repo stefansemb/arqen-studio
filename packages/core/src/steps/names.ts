@@ -1,5 +1,5 @@
 /** Pipeline step order. Kept dependency-free so the web UI can import it. */
-export const STEP_NAMES = ["fetch", "clips", "script", "scriptCheck", "voice", "scenes", "assets", "motion", "metadata", "thumbnail", "render", "upload", "shorts"] as const;
+export const STEP_NAMES = ["fetch", "clips", "script", "scriptCheck", "voice", "scenes", "assets", "metadata", "thumbnail", "render", "upload", "shorts"] as const;
 export type StepName = (typeof STEP_NAMES)[number];
 
 export const STEP_LABELS: Record<StepName, string> = {
@@ -10,7 +10,6 @@ export const STEP_LABELS: Record<StepName, string> = {
   voice: "Generate voice",
   scenes: "Plan scenes",
   assets: "Fetch B-roll",
-  motion: "Animate graphics",
   metadata: "Title & description",
   thumbnail: "Thumbnail",
   render: "Render video",

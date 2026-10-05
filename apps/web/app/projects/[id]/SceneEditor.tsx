@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import type { SceneEdit } from "@yta/core/sceneEdits";
 import { fitClip, MAX_CLIP_RATE } from "@yta/core/timing";
+import type { MotionData } from "@yta/core/sceneEdits";
 
 export interface EditorScene {
   start: number;
@@ -14,6 +15,8 @@ export interface EditorScene {
   clipStart?: number;
   clipEnd?: number;
   zoom?: boolean;
+  sub?: string;
+  motion?: MotionData;
 }
 
 export interface EditorClip {
@@ -24,6 +27,9 @@ export interface EditorClip {
 
 /** The edit that represents a scene as it is saved now, used as the starting point for a draft. */
 export function editFromScene(scene: EditorScene, index: number): SceneEdit {
+  if (scene.type === "stat" || scene.type === "quote" || scene.type === "timeline" || scene.type === "compare") {
+    return { index, type: scene.type, text: scene.text, sub: scene.sub, motion: scene.motion };
+  }
   return scene.type === "clip" && scene.clip
     ? { index, type: "clip", clip: scene.clip, clipStart: scene.clipStart ?? 0, clipEnd: scene.clipEnd, text: scene.text, zoom: scene.zoom !== false }
     : scene.type === "broll" && scene.asset
@@ -32,6 +38,23 @@ export function editFromScene(scene: EditorScene, index: number): SceneEdit {
 }
 
 const round = (n: number) => Math.round(n * 10) / 10;
+
+const GRAPHICS = [
+  { value: "stat", label: "Animated number" },
+  { value: "quote", label: "Quote card" },
+  { value: "timeline", label: "Timeline" },
+  { value: "compare", label: "Comparison" },
+] as const;
+type GraphicsType = (typeof GRAPHICS)[number]["value"];
+const isGraphics = (t: string): t is GraphicsType => GRAPHICS.some((g) => g.value === t);
+
+/** Rows of "a | b | c" text, kept raw while typing so spaces around separators don't vanish. */
+const toLines = (rows: string[][]) => rows.map((r) => r.join(" | ")).join("\n");
+const fromLines = (text: string) =>
+  text
+    .split("\n")
+    .map((l) => l.split("|").map((c) => c.trim()))
+    .filter((cells) => cells.some(Boolean));
 
 export function SceneEditor(props: {
   projectId: string;
@@ -47,6 +70,9 @@ export function SceneEditor(props: {
   const clip = edit.type === "clip" ? clips.find((c) => c.id === edit.clip) : undefined;
   const sceneSec = scene.end - scene.start;
   const update = (patch: Partial<SceneEdit>) => props.onChange({ ...edit, ...patch });
+  // Raw textarea contents for timeline events and comparison rows.
+  const [eventsText, setEventsText] = useState(() => toLines((edit.motion?.events ?? []).map((e) => [e.when, e.what])));
+  const [rowsText, setRowsText] = useState(() => toLines((edit.motion?.rows ?? []).map((r) => [r.label, r.left, r.right])));
 
   function choose(value: string) {
     if (value.startsWith("clip:")) {
@@ -59,6 +85,8 @@ export function SceneEditor(props: {
         clipEnd: keepRange ? edit.clipEnd : round(Math.min(c.durationSec, sceneSec)),
         text: edit.type === "broll" ? "" : edit.text,
       });
+    } else if (isGraphics(value)) {
+      update({ type: value, clip: undefined, clipStart: undefined, clipEnd: undefined, text: edit.type === "broll" ? "" : edit.text });
     } else {
       update({ type: value as "title" | "broll", clip: undefined, clipStart: undefined, clipEnd: undefined });
     }
@@ -105,6 +133,11 @@ export function SceneEditor(props: {
             </option>
           ))}
           <option value="title">Title card</option>
+          {GRAPHICS.map((g) => (
+            <option key={g.value} value={g.value}>
+              {g.label}
+            </option>
+          ))}
           {scene.asset ? <option value="broll">B-roll image</option> : null}
         </select>
       </div>
@@ -171,16 +204,111 @@ export function SceneEditor(props: {
         </>
       ) : null}
 
-      {edit.type !== "broll" ? (
+      {edit.type === "stat" ? (
         <div className="row">
-          <span className="label">{edit.type === "clip" ? "Label" : "Text"}</span>
+          <span className="label">Number</span>
+          <input
+            className="input num"
+            style={{ width: 140 }}
+            placeholder="$40B"
+            value={edit.sub ?? ""}
+            maxLength={24}
+            onChange={(e) => update({ sub: e.target.value })}
+          />
+          <span className="muted" style={{ fontSize: 12 }}>
+            Counts up to the number; keeps $, %, x, B and similar around it
+          </span>
+        </div>
+      ) : null}
+
+      {edit.type === "quote" ? (
+        <>
+          <div className="row">
+            <span className="label">Quote</span>
+            <textarea className="input" rows={3} value={edit.text ?? ""} maxLength={300} onChange={(e) => update({ text: e.target.value })} />
+          </div>
+          <div className="row">
+            <span className="label">Who</span>
+            <input className="input" placeholder="Name, role" value={edit.sub ?? ""} maxLength={80} onChange={(e) => update({ sub: e.target.value })} />
+          </div>
+        </>
+      ) : edit.type !== "broll" ? (
+        <div className="row">
+          <span className="label">{edit.type === "clip" || edit.type === "stat" ? "Label" : edit.type === "title" ? "Text" : "Headline"}</span>
           <input
             className="input"
-            placeholder={edit.type === "clip" ? "Optional step label, e.g. Step 2: Pick a length" : "Title text"}
+            placeholder={
+              edit.type === "clip" ? "Optional step label, e.g. Step 2: Pick a length" : edit.type === "stat" ? "raised in its latest round" : "Title text"
+            }
             value={edit.text ?? ""}
             maxLength={120}
             onChange={(e) => update({ text: e.target.value })}
           />
+        </div>
+      ) : null}
+
+      {edit.type === "timeline" ? (
+        <div className="row" style={{ alignItems: "flex-start" }}>
+          <span className="label">Events</span>
+          <textarea
+            className="input"
+            rows={5}
+            placeholder={"2023 | GPT-4\n2025 | GPT-5"}
+            value={eventsText}
+            onChange={(e) => {
+              setEventsText(e.target.value);
+              update({ motion: { events: fromLines(e.target.value).map(([when = "", ...what]) => ({ when, what: what.join(" ") })) } });
+            }}
+          />
+        </div>
+      ) : null}
+
+      {edit.type === "compare" ? (
+        <>
+          <div className="row">
+            <span className="label">Sides</span>
+            <input
+              className="input"
+              placeholder="Left"
+              value={edit.motion?.left ?? ""}
+              maxLength={30}
+              onChange={(e) => update({ motion: { ...edit.motion, left: e.target.value } })}
+            />
+            <span className="muted">vs</span>
+            <input
+              className="input"
+              placeholder="Right"
+              value={edit.motion?.right ?? ""}
+              maxLength={30}
+              onChange={(e) => update({ motion: { ...edit.motion, right: e.target.value } })}
+            />
+          </div>
+          <div className="row" style={{ alignItems: "flex-start" }}>
+            <span className="label">Rows</span>
+            <textarea
+              className="input"
+              rows={4}
+              placeholder={"Context window | 1M | 400K\nPrice / 1M tokens | $15 | $10"}
+              value={rowsText}
+              onChange={(e) => {
+                setRowsText(e.target.value);
+                update({
+                  motion: { ...edit.motion, rows: fromLines(e.target.value).map(([label = "", left = "", right = ""]) => ({ label, left, right })) },
+                });
+              }}
+            />
+          </div>
+        </>
+      ) : null}
+
+      {isGraphics(edit.type) ? (
+        <div className="muted" style={{ fontSize: 12 }}>
+          {edit.type === "timeline"
+            ? "One event per line: when | what (2-7 events). "
+            : edit.type === "compare"
+              ? "One row per line: label | left | right (up to 5). Numeric rows get bars. "
+              : ""}
+          Animated with Arqen Motion when the video renders; without it a built-in card is shown.
         </div>
       ) : null}
     </div>

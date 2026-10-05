@@ -7,6 +7,7 @@ import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import type { StepContext } from "../context";
 import { buildVideoProps } from "../props";
+import { renderMotionClips } from "./motion";
 
 const MIME: Record<string, string> = {
   ".mp3": "audio/mpeg",
@@ -62,6 +63,8 @@ export function getBundle(): Promise<string> {
 }
 
 export async function renderVideo(ctx: StepContext): Promise<void> {
+  // Graphics first, so scenes edited since the last render get fresh clips.
+  await renderMotionClips(ctx);
   const server = await serveDir(ctx.dir);
   try {
     const { port } = server.address() as AddressInfo;

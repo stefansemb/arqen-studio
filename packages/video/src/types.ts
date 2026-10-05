@@ -16,6 +16,8 @@ export interface VideoScene {
   credit?: string;
   /** Pre-rendered full-screen graphics clip (Arqen Motion) shown instead of the built-in card. */
   motion?: string;
+  /** The same graphics sized for a Short's band (1080x730), timed to the Short. */
+  motionShort?: string;
   /** Screen recording for "clip" scenes, already fitted to the scene length. */
   video?: {
     src: string;

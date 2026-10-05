@@ -11,6 +11,7 @@ import { charsToWords, scriptToText } from "../timing";
 import type { Script, Timings } from "../types";
 import { getBundle, serveDir } from "./render";
 import { voiceoverKey } from "./voice";
+import { attachShortMotionClips } from "./motion";
 
 /**
  * The voice the project's narration was actually spoken with, so a hook sounds like the clip after it
@@ -94,6 +95,7 @@ export async function renderShorts(ctx: StepContext): Promise<void> {
       const short = await ensureHookAudio(ctx, pending);
       const inputProps = buildShortProps(ctx.project.id, short, `http://127.0.0.1:${port}`);
       if (!inputProps) throw new Error("Missing voiceover or scenes.");
+      await attachShortMotionClips(ctx, inputProps.base.scenes, `http://127.0.0.1:${port}`);
       const composition = await selectComposition({ serveUrl, id: "ShortVideo", inputProps });
       const file = `shorts/${short.id}.mp4`;
       const tmp = path.join(ctx.dir, `shorts/${short.id}.tmp.mp4`);

@@ -5,6 +5,7 @@ import { readJson, writeJson, type StepContext } from "../context";
 import { getChannel } from "../channels";
 import { MOTION_SCENE_TYPES, motionDir, renderMotion, type MotionJob } from "../providers/motion";
 import { NARRATION_LEAD_IN_SEC } from "../props";
+import type { VideoScene } from "@yta/video";
 import type { PlannedScene } from "../types";
 
 /** Extra seconds rendered past the scene end, so the video never runs out before the cut. */
@@ -66,10 +67,42 @@ export function motionJob(scene: PlannedScene, durationSec: number, accents: { a
   }
 }
 
+/** Size of graphics clips in Shorts: the band between the hook text and the captions (packages/video/src/ShortVideo.tsx). */
+export const SHORT_MOTION_SIZE = { width: 1080, height: 730 };
+
+type Accents = { accent: string; accent2: string };
+
+function channelAccents(): Accents {
+  const theme = getChannel().theme;
+  return { accent: theme.accent || DEFAULT_ACCENTS.accent, accent2: theme.accent2 || DEFAULT_ACCENTS.accent2 };
+}
+
+/**
+ * Returns the clip for a job (relative to the project dir), rendering it unless a clip with the same
+ * content already exists. Clips are named by a hash of template, values and size.
+ */
+async function ensureClip(
+  motion: string,
+  projectDir: string,
+  job: MotionJob,
+  size: { width: number; height: number } | undefined,
+  log: (rendered: number) => void,
+): Promise<string> {
+  const hash = crypto.createHash("sha1").update(JSON.stringify({ job, size })).digest("hex").slice(0, 12);
+  const rel = `motion/${job.template}-${size ? `${size.width}x${size.height}-` : ""}${hash}.mp4`;
+  const out = path.join(projectDir, rel);
+  if (!fs.existsSync(out)) {
+    const started = Date.now();
+    await renderMotion(motion, job, out, size);
+    log((Date.now() - started) / 1000);
+  }
+  return rel;
+}
+
 /**
  * Renders animated graphics (numbers, quotes, timelines, comparisons) with Arqen Motion and
- * attaches them to the scenes. Clips are named by a hash of their content, so unchanged
- * scenes are reused. Any failure leaves the scene on its built-in card.
+ * attaches them to the scenes. Runs at the start of every video render, so edited scenes get
+ * fresh clips; unchanged clips are reused. Any failure leaves the scene on its built-in card.
  */
 export async function renderMotionClips(ctx: StepContext): Promise<void> {
   const scenes = readJson<PlannedScene[]>(ctx, "scenes.json");
@@ -79,15 +112,12 @@ export async function renderMotionClips(ctx: StepContext): Promise<void> {
 
   if (!targets.length || !dir) {
     if (targets.length) ctx.log("Arqen Motion not found (set MOTION_DIR): using the built-in cards", "warn");
-    else ctx.log("No graphics scenes");
     writeJson(ctx, "scenes.json", scenes);
     return;
   }
 
-  const theme = getChannel().theme;
-  const accents = { accent: theme.accent || DEFAULT_ACCENTS.accent, accent2: theme.accent2 || DEFAULT_ACCENTS.accent2 };
+  const accents = channelAccents();
   let rendered = 0;
-  let reused = 0;
   let failed = 0;
   for (const { s, i } of targets) {
     // The first scene also covers the silence before the narration.
@@ -97,23 +127,41 @@ export async function renderMotionClips(ctx: StepContext): Promise<void> {
       ctx.log(`Scene ${i + 1} (${s.type}): not enough data for an animation, using the built-in card`, "warn");
       continue;
     }
-    const hash = crypto.createHash("sha1").update(JSON.stringify(job)).digest("hex").slice(0, 12);
-    const rel = `motion/${job.template}-${hash}.mp4`;
-    const out = path.join(ctx.dir, rel);
     try {
-      if (fs.existsSync(out)) reused++;
-      else {
-        const started = Date.now();
-        await renderMotion(dir, job, out);
+      s.motionClip = await ensureClip(dir, ctx.dir, job, undefined, (sec) => {
         rendered++;
-        ctx.log(`Scene ${i + 1}: ${job.template} rendered in ${((Date.now() - started) / 1000).toFixed(1)} s`);
-      }
-      s.motionClip = rel;
+        ctx.log(`Scene ${i + 1}: ${job.template} animated in ${sec.toFixed(1)} s`);
+      });
     } catch (err) {
       failed++;
       ctx.log(`Scene ${i + 1} (${s.type}): ${(err as Error).message}`, "warn");
     }
   }
   writeJson(ctx, "scenes.json", scenes);
-  ctx.log(`Graphics: ${rendered} rendered, ${reused} reused${failed ? `, ${failed} failed (built-in cards used)` : ""}`);
+  ctx.log(`Graphics: ${rendered} animated, ${targets.length - rendered - failed} reused${failed ? `, ${failed} failed (built-in cards used)` : ""}`);
+}
+
+/**
+ * Gives a Short's graphics scenes clips sized for its band (SHORT_MOTION_SIZE), timed to the part
+ * of the scene the Short shows, so the animation starts when the scene appears. Scenes are the
+ * Short's own (already cut and shifted); a scene that fails keeps the long video's clip.
+ */
+export async function attachShortMotionClips(ctx: StepContext, scenes: VideoScene[], baseUrl: string): Promise<void> {
+  const dir = motionDir();
+  if (!dir || !scenes.some((s) => s.motion)) return;
+  const planned = readJson<PlannedScene[]>(ctx, "scenes.json");
+  const accents = channelAccents();
+  const prefix = baseUrl.replace(/\/$/, "") + "/";
+  for (const sc of scenes) {
+    if (!sc.motion?.startsWith(prefix)) continue;
+    const source = planned.find((p) => p.motionClip === sc.motion!.slice(prefix.length));
+    const job = source && motionJob(source, sc.end - sc.start + TAIL_SEC, accents);
+    if (!job) continue;
+    try {
+      const rel = await ensureClip(dir, ctx.dir, job, SHORT_MOTION_SIZE, (sec) => ctx.log(`Short graphics: ${job.template} animated in ${sec.toFixed(1)} s`));
+      sc.motionShort = prefix + rel;
+    } catch (err) {
+      ctx.log(`Short graphics (${sc.type}): ${(err as Error).message}`, "warn");
+    }
+  }
 }

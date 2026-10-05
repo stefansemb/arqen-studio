@@ -7,6 +7,7 @@ import { FPS, HEIGHT, NewsVideo, totalSeconds, WIDTH, type NewsVideoProps } from
 import type { EventRow, ProjectRow } from "@yta/core/db";
 import { isSkipped, STEP_LABELS, STEP_NAMES, type StepName } from "@yta/core/steps";
 import type { SceneEdit } from "@yta/core/sceneEdits";
+import type { MotionData } from "@yta/core/sceneEdits";
 import { SceneEditor } from "./SceneEditor";
 import { ScriptPanel } from "./ScriptPanel";
 import { PublishPanel } from "./PublishPanel";
@@ -23,7 +24,7 @@ interface Detail {
   script: { title: string; hook: string; segments: { heading: string; text: string }[]; cta: string } | null;
   scriptCheck: { ok: boolean; wordCount: number; issues: { severity: string; claim: string; problem: string }[] } | null;
   scenes:
-    | { start: number; end: number; type: string; text: string; sub?: string; asset?: string; clip?: string; clipStart?: number; clipEnd?: number; zoom?: boolean }[]
+    | { start: number; end: number; type: string; text: string; sub?: string; asset?: string; clip?: string; clipStart?: number; clipEnd?: number; zoom?: boolean; motion?: MotionData }[]
     | null;
   clips:
     | { id: string; original: string; thumbnail: string; durationSec: number; summary: string; timeline: { start: number; end: number; description: string }[]; activity?: string }[]

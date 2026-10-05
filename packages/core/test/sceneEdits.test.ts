@@ -49,3 +49,30 @@ describe("applySceneEdits", () => {
     expect(() => applySceneEdits(scenes, clips, [{ index: 2, type: "clip", clip: "clip-1", clipStart: 4, clipEnd: 4.1 }])).toThrow(/at least/);
   });
 });
+
+describe("applySceneEdits graphics", () => {
+  const base: PlannedScene[] = [{ start: 0, end: 5, type: "broll", text: "", query: "servers", asset: "assets/1.jpg" }];
+
+  it("turns a scene into an animated number", () => {
+    const [s] = applySceneEdits(base, [], [{ index: 0, type: "stat", text: "raised", sub: "$40B" }]);
+    expect(s).toMatchObject({ type: "stat", text: "raised", sub: "$40B", asset: "assets/1.jpg" });
+  });
+
+  it("keeps clean timeline events and rejects too few", () => {
+    const [s] = applySceneEdits(base, [], [
+      { index: 0, type: "timeline", text: "Road", motion: { events: [{ when: "2023", what: "GPT-4" }, { when: " ", what: "x" }, { when: "2025", what: "GPT-5" }] } },
+    ]);
+    expect(s.motion?.events).toEqual([{ when: "2023", what: "GPT-4" }, { when: "2025", what: "GPT-5" }]);
+    expect(() => applySceneEdits(base, [], [{ index: 0, type: "timeline", motion: { events: [{ when: "2023", what: "x" }] } }])).toThrow(/at least 2/);
+  });
+
+  it("validates comparisons and clears graphics data when switching back", () => {
+    expect(() => applySceneEdits(base, [], [{ index: 0, type: "compare", motion: { left: "A", right: "", rows: [] } }])).toThrow(/both names/);
+    const [c] = applySceneEdits(base, [], [
+      { index: 0, type: "compare", text: "A vs B", motion: { left: "A", right: "B", rows: [{ label: "Price", left: "$1", right: "$2" }] } },
+    ]);
+    const [t] = applySceneEdits([c], [], [{ index: 0, type: "title", text: "Back" }]);
+    expect(t.motion).toBeUndefined();
+    expect(t.type).toBe("title");
+  });
+});

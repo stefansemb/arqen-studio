@@ -29,13 +29,21 @@ export interface MotionJob {
 
 const RENDER_TIMEOUT_MS = 4 * 60_000;
 
-/** Renders one clip to `out` (absolute path). Holds the last frame instead of fading out. */
-export async function renderMotion(dir: string, job: MotionJob, out: string): Promise<void> {
+/** Renders one clip to `out` (absolute path), 1920x1080 unless a size is given. Holds the last frame instead of fading out. */
+export async function renderMotion(dir: string, job: MotionJob, out: string, size?: { width: number; height: number }): Promise<void> {
   const valuesFile = out.replace(/\.mp4$/, ".json");
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(valuesFile, JSON.stringify(job.values, null, 2));
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(process.execPath, [path.join(dir, "motion.mjs"), job.template, valuesFile, "--no-outro", "-o", out], {
+    const child = spawn(process.execPath, [
+      path.join(dir, "motion.mjs"),
+      job.template,
+      valuesFile,
+      "--no-outro",
+      ...(size ? ["--size", `${size.width}x${size.height}`] : []),
+      "-o",
+      out,
+    ], {
       cwd: dir,
       env: { ...process.env, DO_NOT_TRACK: "1" },
     });
