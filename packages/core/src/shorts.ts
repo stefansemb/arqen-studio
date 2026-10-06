@@ -12,7 +12,7 @@ import { TEMPLATES } from "./templates";
 import { wordsToSentences } from "./timing";
 import type { Timings, Word } from "./types";
 import { getProject } from "./db";
-import { buildVideoResource, getAccessToken, uploadVideo, type UploadOptions } from "./youtube";
+import { buildVideoResource, declareNoPaidPromotion, getAccessToken, uploadVideo, type UploadOptions } from "./youtube";
 
 /** shorts.json: vertical clips cut from the long video, reusing its voiceover. */
 export interface ShortSpec {
@@ -253,6 +253,8 @@ async function uploadAsChannel(
     notifySubscribers: opts.notifySubscribers,
     accessToken: await getAccessToken(),
   });
+  // Not worth failing the Short over: YouTube Studio can still answer it.
+  await declareNoPaidPromotion(id).catch((err) => console.warn(`Short ${id}: paid promotion not declared: ${(err as Error).message}`));
   const youtube = {
     videoId: id,
     url: `https://youtube.com/shorts/${id}`,

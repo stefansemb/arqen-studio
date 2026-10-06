@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { writeJson, type StepContext } from "../context";
 import { readPublish } from "../publishStore";
-import { addToPlaylist, buildVideoResource, connectionStatus, ensurePlaylist, getAccessToken, setThumbnail, uploadVideo, YouTubeError } from "../youtube";
+import { addToPlaylist, buildVideoResource, connectionStatus, declareNoPaidPromotion, ensurePlaylist, getAccessToken, setThumbnail, uploadVideo, YouTubeError } from "../youtube";
 import { readAppSettings } from "../settings";
 import { commentDue, postProjectComment } from "../comment";
 
@@ -38,6 +38,13 @@ export async function uploadToYouTube(ctx: StepContext): Promise<void> {
   });
   const url = `https://youtu.be/${id}`;
   ctx.log(`Uploaded: ${url}`);
+
+  try {
+    await declareNoPaidPromotion(id);
+    ctx.log('Answered "Paid promotion: No"');
+  } catch (err) {
+    ctx.log(`Paid promotion not declared (answer it in YouTube Studio): ${(err as Error).message}`, "warn");
+  }
 
   let thumbnailSet = false;
   const thumb = publish.thumbnails[publish.selectedThumbnail];

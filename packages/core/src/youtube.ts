@@ -481,6 +481,19 @@ export async function postComment(videoId: string, text: string): Promise<string
 }
 
 /**
+ * Answers YouTube Studio's "Paid promotion" question with No, so it isn't left open after an API upload.
+ * A separate update after the upload: if YouTube rejects it, the video itself is unaffected.
+ */
+export async function declareNoPaidPromotion(videoId: string): Promise<void> {
+  requireManage();
+  const res = await api("PUT", "videos?part=paidProductPlacementDetails", {
+    id: videoId,
+    paidProductPlacementDetails: { hasPaidProductPlacement: false },
+  });
+  if (!res.ok) throw await apiError(res, "Declaring no paid promotion");
+}
+
+/**
  * Changes an uploaded video's title and/or description. videos.update replaces the whole snippet, so the
  * current one is read and its other writable fields (tags, category, languages) are sent back unchanged.
  */
