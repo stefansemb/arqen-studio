@@ -68,6 +68,8 @@ export interface PlannedScene {
   credit?: string;
   /** Archive or stock site the image came from, for the description's credits. */
   source?: string;
+  /** The image's id at its source, so later videos can avoid repeating it. */
+  imageId?: string;
 }
 
 export interface MotionData {

@@ -7,6 +7,7 @@ import { resizeImage } from "../providers/ffmpeg";
 import { getChannel, type ImageSourceId } from "../channels";
 import type { Article, PlannedScene, Timings } from "../types";
 import { pickImages } from "../providers/imagePick";
+import { fileHash, recentImages } from "../recentImages";
 
 const EXT: Record<string, string> = {
   "image/jpeg": ".jpg",
@@ -86,6 +87,9 @@ export async function fetchAssets(ctx: StepContext): Promise<void> {
   fs.mkdirSync(assetsDir);
 
   const used = new Set<string>();
+  // Images the channel's latest videos already showed: preferred against, so viewers don't keep seeing the same stock shots.
+  const recent = recentImages(ctx.project.id);
+  let avoided = 0;
   const searchCache = new Map<string, StockImage[]>();
   const failures = new Map<ImageSourceId, number>();
   const perSource = new Map<string, number>();
@@ -117,6 +121,7 @@ export async function fetchAssets(ctx: StepContext): Promise<void> {
     delete s.asset;
     delete s.credit;
     delete s.source;
+    delete s.imageId;
     const name = `scene-${String(i).padStart(3, "0")}`;
 
     try {
@@ -135,60 +140,75 @@ export async function fetchAssets(ctx: StepContext): Promise<void> {
         }
       }
 
-      if (!s.asset && s.query) {
-        // Archive-first: retry the archives with just the subject words ("Vlad") before giving up.
-        const broad = specificWords(s.query).join(" ");
-        const attempts: [ImageSourceId, string][] = sources.map((src) => [src, s.query!]);
-        if (archiveFirst && broad && broad !== s.query.toLowerCase()) attempts.push(...sources.filter((src) => !STOCK_SOURCES.includes(src)).map((src): [ImageSourceId, string] => [src, broad]));
-        const allowed = (img: StockImage, source: ImageSourceId) =>
-          !used.has(img.id) && (!archiveFirst || !STOCK_SOURCES.includes(source) || stockFits(s.query!, img.description));
-        const take = async (img: StockImage, source: ImageSourceId) => {
-          const rel = await download(img.url, ctx.dir, name).catch(() => null);
-          if (!rel) return false;
-          used.add(img.id);
-          s.asset = rel;
-          s.credit = img.credit;
-          s.source = img.source;
-          perSource.set(SOURCE_NAMES[source], (perSource.get(SOURCE_NAMES[source]) ?? 0) + 1);
-          return true;
-        };
+      // First pass: only images the channel hasn't shown lately. Second pass (only if nothing new fits): any image.
+      for (const fresh of [true, false]) {
+        if (!s.asset && s.query) {
+          // Archive-first: retry the archives with just the subject words ("Vlad") before giving up.
+          const broad = specificWords(s.query).join(" ");
+          const attempts: [ImageSourceId, string][] = sources.map((src) => [src, s.query!]);
+          if (archiveFirst && broad && broad !== s.query.toLowerCase()) attempts.push(...sources.filter((src) => !STOCK_SOURCES.includes(src)).map((src): [ImageSourceId, string] => [src, broad]));
+          const allowed = (img: StockImage, source: ImageSourceId) =>
+            !used.has(img.id) &&
+            !(fresh && recent.ids.has(img.id)) &&
+            (!archiveFirst || !STOCK_SOURCES.includes(source) || stockFits(s.query!, img.description));
+          const take = async (img: StockImage, source: ImageSourceId) => {
+            const rel = await download(img.url, ctx.dir, name).catch(() => null);
+            if (!rel) return false;
+            if (fresh && recent.hashes.has(fileHash(path.join(ctx.dir, rel)))) {
+              // Same picture as in a recent video (older videos have no ids, so the file tells): try the next one.
+              fs.rmSync(path.join(ctx.dir, rel), { force: true });
+              recent.ids.add(img.id);
+              avoided++;
+              return false;
+            }
+            used.add(img.id);
+            s.asset = rel;
+            s.credit = img.credit;
+            s.source = img.source;
+            s.imageId = img.id;
+            perSource.set(SOURCE_NAMES[source], (perSource.get(SOURCE_NAMES[source]) ?? 0) + 1);
+            return true;
+          };
 
-        if (vision) {
-          // Gather a few candidates in source order, let Claude look at them, then download its pick.
-          const candidates: { img: StockImage; source: ImageSourceId }[] = [];
-          for (const [source, query] of attempts) {
-            if (candidates.length >= PICK_CANDIDATES) break;
-            if ((failures.get(source) ?? 0) >= MAX_FAILURES) continue;
-            for (const img of await search(source, query)) {
+          if (vision) {
+            // Gather a few candidates in source order, let Claude look at them, then download its pick.
+            const candidates: { img: StockImage; source: ImageSourceId }[] = [];
+            for (const [source, query] of attempts) {
               if (candidates.length >= PICK_CANDIDATES) break;
-              if (allowed(img, source) && !candidates.some((c) => c.img.id === img.id)) candidates.push({ img, source });
+              if ((failures.get(source) ?? 0) >= MAX_FAILURES) continue;
+              for (const img of await search(source, query)) {
+                if (candidates.length >= PICK_CANDIDATES) break;
+                if (allowed(img, source) && !candidates.some((c) => c.img.id === img.id)) candidates.push({ img, source });
+              }
             }
-          }
-          let ranked = candidates;
-          if (candidates.length) {
-            try {
-              const picked = await pickImages({ narration: narrationFor(s), query: s.query, topic: article.title, candidates: candidates.map((c) => c.img) });
-              ranked = picked.map((p) => candidates.find((c) => c.img === p)!);
-              if (picked.length) judged++;
-              else rejected++;
-            } catch (err) {
-              vision = false;
-              ctx.log(`Picking images with Claude failed (${(err as Error).message}); using search order for the rest`, "warn");
+            let ranked = candidates;
+            if (candidates.length) {
+              try {
+                const picked = await pickImages({ narration: narrationFor(s), query: s.query, topic: article.title, candidates: candidates.map((c) => c.img) });
+                ranked = picked.map((p) => candidates.find((c) => c.img === p)!);
+                if (picked.length) judged++;
+                else rejected++;
+              } catch (err) {
+                vision = false;
+                ctx.log(`Picking images with Claude failed (${(err as Error).message}); using search order for the rest`, "warn");
+              }
             }
-          }
-          for (const { img, source } of ranked) {
-            if (await take(img, source)) break;
-            ctx.log(`Scene ${i + 1}: picked image could not be downloaded (${img.url.slice(0, 120)})`, "warn");
-          }
-        } else {
-          for (const [source, query] of attempts) {
-            if ((failures.get(source) ?? 0) >= MAX_FAILURES) continue;
-            for (const img of (await search(source, query)).filter((r) => allowed(r, source))) if (await take(img, source)) break;
-            if (s.asset) break;
+            for (const { img, source } of ranked) {
+              if (await take(img, source)) break;
+              ctx.log(`Scene ${i + 1}: picked image could not be downloaded (${img.url.slice(0, 120)})`, "warn");
+            }
+          } else {
+            for (const [source, query] of attempts) {
+              if ((failures.get(source) ?? 0) >= MAX_FAILURES) continue;
+              for (const img of (await search(source, query)).filter((r) => allowed(r, source))) if (await take(img, source)) break;
+              if (s.asset) break;
+            }
           }
         }
-        if (!s.asset && archiveFirst && s.type === "broll") unfilled.push(i);
-        else if (!s.asset) ctx.log(`No usable image for "${s.query}"`, "warn");
+      }
+      if (!s.asset && s.query) {
+        if (archiveFirst && s.type === "broll") unfilled.push(i);
+        else ctx.log(`No usable image for "${s.query}"`, "warn");
       }
     } catch (err) {
       ctx.log(`Scene ${i + 1}: ${(err as Error).message}`, "warn");
@@ -229,5 +249,5 @@ export async function fetchAssets(ctx: StepContext): Promise<void> {
 
   writeJson(ctx, "scenes.json", scenes);
   const bySource = [...perSource].map(([n, c]) => `${n} ${c}`).join(", ");
-  ctx.log(`Resolved images for ${found}/${scenes.length} scenes${sources.length > 1 && bySource ? ` (${bySource})` : ""}${reused ? `, ${reused} reusing an earlier archive image` : ""}${judged || rejected ? `; Claude picked ${judged}, rejected all candidates for ${rejected}` : ""}`);
+  ctx.log(`Resolved images for ${found}/${scenes.length} scenes${sources.length > 1 && bySource ? ` (${bySource})` : ""}${reused ? `, ${reused} reusing an earlier archive image` : ""}${judged || rejected ? `; Claude picked ${judged}, rejected all candidates for ${rejected}` : ""}${avoided ? `; skipped ${avoided} image(s) already shown in recent videos` : ""}`);
 }
