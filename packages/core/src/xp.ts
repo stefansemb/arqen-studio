@@ -11,7 +11,7 @@ import { DATA_DIR, PROJECTS_DIR, ROOT } from "./paths";
  */
 
 export type XpApp = "studio" | "mission" | "thumbnails" | "motion" | "site";
-export type XpKind = "video" | "short" | "speedrun" | "commit" | "feature" | "release" | "render" | "task" | "workday" | "streak";
+export type XpKind = "video" | "short" | "speedrun" | "commit" | "feature" | "release" | "render" | "task" | "workday" | "milestone" | "streak";
 
 export interface XpEvent {
   at: string;
@@ -42,7 +42,7 @@ export interface XpSummary {
   recent: XpEvent[];
 }
 
-export const XP = { video: 100, short: 25, speedrun: 50, commit: 10, feature: 30, release: 150, render: 5, task: 20, workday: 15, streakWeek: 50 };
+export const XP = { video: 100, short: 25, speedrun: 50, commit: 10, feature: 30, release: 150, render: 5, task: 20, workday: 15, milestone: 40, streakWeek: 50 };
 
 export const APP_LABELS: Record<XpApp, string> = {
   studio: "Arqen AI Studio",
@@ -55,7 +55,7 @@ export const APP_LABELS: Record<XpApp, string> = {
 const ARQEN_APPS: XpApp[] = ["studio", "mission", "thumbnails", "motion"];
 
 /** Shipping counts for the streak; plain commits and renders don't. */
-const SHIPPING: XpKind[] = ["video", "short", "feature", "release"];
+const SHIPPING: XpKind[] = ["video", "short", "feature", "release", "milestone"];
 
 const TITLES: [number, string][] = [
   [1, "Rookie"],
@@ -82,7 +82,7 @@ function weekOf(at: string): string {
 
 const WEEK_MS = 7 * 86_400_000;
 
-type Counters = { video: number; short: number; speedrun: number; feature: number; release: number; render: number; task: number; streak: number; bestDay: number; apps: Set<XpApp> };
+type Counters = { video: number; short: number; speedrun: number; feature: number; release: number; render: number; task: number; milestone: number; streak: number; bestDay: number; apps: Set<XpApp> };
 
 const ACHIEVEMENTS: (Omit<Achievement, "unlockedAt"> & { test: (c: Counters) => boolean })[] = [
   { id: "first-upload", name: "First Upload", description: "Put your first video on YouTube", test: (c) => c.video >= 1 },
@@ -98,6 +98,7 @@ const ACHIEVEMENTS: (Omit<Achievement, "unlockedAt"> & { test: (c: Counters) => 
   { id: "feature-factory", name: "Feature Factory", description: "50 new features", test: (c) => c.feature >= 50 },
   { id: "motion-maker", name: "Motion Maker", description: "25 Motion clips rendered", test: (c) => c.render >= 25 },
   { id: "agent-boss", name: "Agent Boss", description: "10 Mission Control tasks completed", test: (c) => c.task >= 10 },
+  { id: "milestone-maker", name: "Milestone Maker", description: "10 project milestones ticked off", test: (c) => c.milestone >= 10 },
   { id: "all-hands", name: "All Hands", description: "Earn XP in all four Arqen apps", test: (c) => ARQEN_APPS.every((a) => c.apps.has(a)) },
 ];
 
@@ -121,7 +122,7 @@ export function summarize(events: XpEvent[], now = new Date()): XpSummary {
   const streakWeeks = prev && thisWeek - prev <= WEEK_MS ? run : 0;
 
   const all = [...sorted, ...bonuses].sort((a, b) => a.at.localeCompare(b.at));
-  const c: Counters = { video: 0, short: 0, speedrun: 0, feature: 0, release: 0, render: 0, task: 0, streak: 0, bestDay: 0, apps: new Set() };
+  const c: Counters = { video: 0, short: 0, speedrun: 0, feature: 0, release: 0, render: 0, task: 0, milestone: 0, streak: 0, bestDay: 0, apps: new Set() };
   const perDay = new Map<string, number>();
   const unlocked = new Map<string, string>();
   const perApp: Record<XpApp, number> = { studio: 0, mission: 0, thumbnails: 0, motion: 0, site: 0 };
@@ -239,6 +240,26 @@ function missionTasks(dir: string): XpEvent[] {
   }
 }
 
+/** Mission Control's project board (projects.json), keyed by project id; unknown projects count for Mission Control. */
+const BOARD_APPS: Record<string, XpApp> = {
+  "arqen-ai-studio": "studio",
+  "arqen-mission-control": "mission",
+  "arqen-thumbnail": "thumbnails",
+  "arqen-motion": "motion",
+  "samidatools-com": "site",
+};
+
+function milestones(dir: string): XpEvent[] {
+  const board = readJson<{ projects?: { id: string; name: string; milestones?: { text: string; done?: boolean; done_at?: string | null }[] }[] }>(
+    path.join(dir, "data", "projects.json"),
+  );
+  return (board?.projects ?? []).flatMap((p) =>
+    (p.milestones ?? [])
+      .filter((m) => m.done && m.done_at)
+      .map((m) => ({ at: new Date(m.done_at!).toISOString(), app: BOARD_APPS[p.id] ?? "mission", kind: "milestone" as const, xp: XP.milestone, label: `${p.name}: ${m.text}` })),
+  );
+}
+
 function motionRenders(dir: string): XpEvent[] {
   const renders = path.join(dir, "renders");
   if (!fs.existsSync(renders)) return [];
@@ -279,6 +300,7 @@ export function collectXpEvents(): XpEvent[] {
     ...gitEvents("studio", ROOT),
     ...gitEvents("mission", APP_DIRS.mission),
     ...missionTasks(APP_DIRS.mission),
+    ...milestones(APP_DIRS.mission),
     ...gitEvents("motion", APP_DIRS.motion),
     ...motionRenders(APP_DIRS.motion),
     ...progress("thumbnails", APP_DIRS.thumbnails, "prototyp"),
