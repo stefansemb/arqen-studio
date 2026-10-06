@@ -118,8 +118,8 @@ Use "broll" for most scenes. Use "title" for chapter openers (a few words, e.g. 
 quotes that are in the narration and attributed to a historical person or source, and "stat" for a striking date or number.`,
   packaging: `Pinned comment: a concrete question about this story that history fans want to argue about (e.g. "Was Vlad a monster or a
 national hero?"), not "What do you think?".
-Thumbnail text: 2-5 punchy words that ADD to the title rather than repeat it; highlight the single most important word.
-Start every thumbnail text with the recognizable subject (the person, legend, event or film, e.g. "Dracula Was Real", "Braveheart Lied"),
+Thumbnail text: 2 punchy words (3 at most, it is set huge on 2 lines) that ADD to the title rather than repeat it; highlight the single most important word.
+Start every thumbnail text with the recognizable subject (the person, legend, event or film, e.g. "Dracula Existed", "Braveheart Lied"),
 so a viewer scrolling past knows the topic at a glance. Only state what the video supports.
 Titles: favor the proven formats of the niche: "The True Story Behind X", "X Was a Lie. The Truth Was Worse", "X: What Really Happened",
 "The Untold Story of X". Never claim something the video does not show.`,

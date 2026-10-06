@@ -27,7 +27,7 @@ const MetadataSchema = z.object({
         gesture: z.string().describe("Presenter gesture from the list in the instructions, or empty if there is none"),
       }),
     )
-    .describe("3 thumbnail text options, 2-5 words each, each starting with the video's subject"),
+    .describe("3 thumbnail text options, 2 words each (3 at most), each starting with the video's subject"),
   commentQuestion: z
     .string()
     .describe("Opening of the channel's pinned comment: 1-2 short sentences ending in a specific question viewers want to answer; no links, no hashtags"),
@@ -37,9 +37,9 @@ const STOCK_SITES = [SOURCE_NAMES.pexels, SOURCE_NAMES.pixabay];
 
 /** Pinned comment and thumbnail guidance for templates without their own (the AI news ones). */
 const DEFAULT_PACKAGING = `Pinned comment: a concrete opinion question about this story (e.g. "Would you trust Gemini 4 with your codebase?"), not "What do you think?".
-Thumbnail text: 2-5 punchy words that ADD to the title rather than repeat it; highlight the single most important word.
-Start every thumbnail text with the recognizable subject people search for (product, model, company or person, e.g. "Gemini 4 Locked Away",
-"OpenAI Hits Pause"; for a roundup, the biggest story's subject), so a viewer scrolling past knows the topic at a glance. Only state what the video supports.`;
+Thumbnail text: 2 punchy words (3 at most, it is set huge on 2 lines) that ADD to the title rather than repeat it; highlight the single most important word.
+Start every thumbnail text with the recognizable subject people search for (product, model, company or person, e.g. "Gemini Locked",
+"OpenAI Pauses"; for a roundup, the biggest story's subject), so a viewer scrolling past knows the topic at a glance. Only state what the video supports.`;
 
 function readRoundupSources(dir: string): { title: string; url: string }[] {
   const p = path.join(dir, "articles.json");

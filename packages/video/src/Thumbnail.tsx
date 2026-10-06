@@ -4,7 +4,7 @@ import { resolveTheme, type ThemeOverrides } from "./theme";
 
 export interface ThumbnailProps {
   [key: string]: unknown;
-  /** 2-5 words, rendered uppercase. */
+  /** Ideally 2 words, rendered uppercase on at most 2 lines. */
   text: string;
   /** A word from `text` drawn in the accent color. */
   highlight?: string;
@@ -40,15 +40,18 @@ export const PRESENTER_BOX = { right: 20, height: 690, maxWidth: 700 };
 export const THUMB_WIDTH = 1280;
 export const THUMB_HEIGHT = 720;
 
-/** Splits the text into lines of at most `max` characters so it can be set very large. */
-function lines(text: string, max = 12): string[] {
-  const out: string[] = [];
-  for (const word of text.toUpperCase().split(/\s+/).filter(Boolean)) {
-    const last = out[out.length - 1];
-    if (last && (last + " " + word).length <= max) out[out.length - 1] = `${last} ${word}`;
-    else out.push(word);
+/** Splits the text into at most two lines, balanced so the longest is as short as possible and the text can be set very large. */
+function lines(text: string): string[] {
+  const words = text.toUpperCase().split(/\s+/).filter(Boolean);
+  if (words.length < 2) return words;
+  let best = [words.join(" ")];
+  let bestLen = best[0].length;
+  for (let i = 1; i < words.length; i++) {
+    const pair = [words.slice(0, i).join(" "), words.slice(i).join(" ")];
+    const len = Math.max(pair[0].length, pair[1].length);
+    if (len < bestLen) [best, bestLen] = [pair, len];
   }
-  return out.slice(0, 4);
+  return best;
 }
 
 /** A gently curved arrow from (x0, y0) with its tip at (x1, y1), bulging towards the top of the frame. */
@@ -108,8 +111,8 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlight
   const longest = Math.max(...rows.map((r) => r.length), 1);
   // The presenter takes the right side, so the text column is a little narrower.
   const textWidth = layout === "full" && !presenter ? 1170 : presenter ? 640 : 700;
-  // Big enough to read on a phone, small enough that the longest line fits the text column.
-  const fontSize = Math.min(presenter ? 124 : 140, Math.floor((presenter ? 1235 : 1350) / longest), Math.floor(520 / rows.length));
+  // Big enough to read on a phone, small enough that the longest line fits the text column (heavy caps run ~0.64em a letter).
+  const fontSize = Math.min(presenter ? 190 : 210, Math.floor(textWidth / (0.64 * longest)), Math.floor(520 / rows.length));
   const hl = highlight?.toUpperCase().replace(/[^\p{L}\p{N}$%]/gu, "");
   // The arrow needs the headline's real line boxes (lines can wrap inside the column), measured once laid out.
   const column = useRef<HTMLDivElement>(null);
@@ -246,6 +249,7 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlight
               fontWeight: 900,
               lineHeight: 1.02,
               letterSpacing: -2,
+              whiteSpace: "nowrap",
               color: "#fff",
               WebkitTextStroke: `${Math.max(3, fontSize / 28)}px #000`,
               paintOrder: "stroke fill",
