@@ -10,7 +10,7 @@ import { DATA_DIR, PROJECTS_DIR, ROOT } from "./paths";
  * so it is retroactive and can never drift from reality. Only the last level announced on Telegram is stored.
  */
 
-export type XpApp = "studio" | "mission" | "thumbnails" | "motion" | "shareimage" | "site";
+export type XpApp = "studio" | "mission" | "thumbnails" | "motion" | "shareimage" | "packaging" | "site";
 export type XpKind = "video" | "short" | "speedrun" | "commit" | "feature" | "release" | "render" | "task" | "workday" | "milestone" | "streak";
 
 export interface XpEvent {
@@ -50,6 +50,7 @@ export const APP_LABELS: Record<XpApp, string> = {
   thumbnails: "Arqen Thumbnails",
   motion: "Arqen Motion",
   shareimage: "Arqen Share Image",
+  packaging: "Arqen Packaging Check",
   site: "samidatools.com",
 };
 
@@ -126,7 +127,7 @@ export function summarize(events: XpEvent[], now = new Date()): XpSummary {
   const c: Counters = { video: 0, short: 0, speedrun: 0, feature: 0, release: 0, render: 0, task: 0, milestone: 0, streak: 0, bestDay: 0, apps: new Set() };
   const perDay = new Map<string, number>();
   const unlocked = new Map<string, string>();
-  const perApp: Record<XpApp, number> = { studio: 0, mission: 0, thumbnails: 0, motion: 0, shareimage: 0, site: 0 };
+  const perApp: Record<XpApp, number> = { studio: 0, mission: 0, thumbnails: 0, motion: 0, shareimage: 0, packaging: 0, site: 0 };
   let total = 0;
   for (const e of all) {
     total += e.xp;
@@ -165,6 +166,7 @@ export const APP_DIRS: Record<Exclude<XpApp, "studio">, string> = {
   motion: sibling(process.env.MOTION_DIR, "Arqen Motion"),
   /** The site that shows the projects; other websites don't count. */
   shareimage: sibling(process.env.SHARE_IMAGE_DIR, "Arqen Share Image"),
+  packaging: sibling(process.env.PACKAGING_CHECK_DIR, "Arqen Packaging Check"),
   site: sibling(process.env.SITE_DIR, "samidatools-site"),
 };
 
@@ -249,6 +251,7 @@ const BOARD_APPS: Record<string, XpApp> = {
   "arqen-thumbnail": "thumbnails",
   "arqen-motion": "motion",
   "arqen-share-image": "shareimage",
+  "arqen-packaging-check": "packaging",
   "samidatools-com": "site",
 };
 
@@ -308,6 +311,7 @@ export function collectXpEvents(): XpEvent[] {
     ...motionRenders(APP_DIRS.motion),
     ...progress("thumbnails", APP_DIRS.thumbnails, "prototyp"),
     ...gitEvents("shareimage", APP_DIRS.shareimage),
+    ...gitEvents("packaging", APP_DIRS.packaging),
     ...progress("site", APP_DIRS.site),
   ];
 }
