@@ -186,6 +186,20 @@ export async function getAccessToken(): Promise<string> {
   return fresh.access_token;
 }
 
+/**
+ * Why an upload would fail right now, or undefined when it can go ahead. Refreshes the sign-in, so an
+ * expired or revoked one is caught before a video is built (and credits spent) rather than at upload.
+ */
+export async function uploadReady(): Promise<string | undefined> {
+  if (!connectionStatus().connected) return "YouTube is not connected (connect it in the Publish tab)";
+  try {
+    await getAccessToken();
+    return undefined;
+  } catch (err) {
+    return `YouTube sign-in failed, reconnect in the Publish tab (it lasts 7 days while the Google app is in Testing): ${(err as Error).message}`;
+  }
+}
+
 export async function disconnect(): Promise<void> {
   const t = readToken();
   if (t) {

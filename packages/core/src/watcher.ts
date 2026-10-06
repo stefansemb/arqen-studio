@@ -24,7 +24,7 @@ import {
 import { CHANNEL_NAME, DATA_DIR, projectDir } from "./paths";
 import { readPublish } from "./publishStore";
 import { startUpload } from "./uploadRequest";
-import { makeVideoPrivate } from "./youtube";
+import { makeVideoPrivate, uploadReady } from "./youtube";
 import { notify } from "./telegram";
 import type { Brief } from "./steps/script";
 import type { ScriptCheck } from "./types";
@@ -418,6 +418,8 @@ export interface GateInput {
   /** Stories built (or that would have been) in the last 7 days, newest first (ISO). */
   recentBuilds: string[];
   creditsLeft: number | null;
+  /** Why an upload would fail now (YouTube sign-in), checked before building so no credits are wasted. */
+  youtubeBlock?: string;
   settings: AppSettings["watcher"];
   now: number;
 }
@@ -443,9 +445,21 @@ export function decide(g: GateInput): { decision: Decision; note: string } {
   if (ageH > settings.maxConfirmHours) {
     return { decision: "roundup", note: `Confirmed ${ageH.toFixed(0)} h after it was first seen: too late for a fast video, saved for the roundup` };
   }
-  const blocked = capacityBlock(g.recentBuilds, g.creditsLeft, settings, now);
+  const blocked = capacityBlock(g.recentBuilds, g.creditsLeft, settings, now) ?? (settings.autoBuild ? g.youtubeBlock : undefined);
   if (blocked) return ageH > STORY_WINDOW_HOURS ? { decision: "expired", note: blocked } : { decision: "blocked", note: blocked };
   return { decision: "would_build", note: settings.autoBuild ? "" : "Dry run: nothing was built" };
+}
+
+let lastYoutubeAlert = 0;
+
+/** The upload check for the autopilot, with a Telegram heads-up at most every 12 hours so a lapsed sign-in gets noticed. */
+async function youtubeProblem(log: (m: string) => void): Promise<string | undefined> {
+  const problem = await uploadReady();
+  if (problem && Date.now() - lastYoutubeAlert > 12 * 3600_000) {
+    lastYoutubeAlert = Date.now();
+    await notify(`⚠️ Autopilot paused: ${problem}`).catch((err) => log(`Telegram: ${(err as Error).message}`));
+  }
+  return problem;
 }
 
 /** Weekly cap, cooldown and credits: why another video can't be made now, or undefined. Pure. */
@@ -589,11 +603,12 @@ export async function runWatcher(opts: { log?: (msg: string) => void } = {}): Pr
         const bal = await elevenLabsBalance().catch(() => ({ available: false as const, reason: "" }));
         creditsLeft = bal.available ? bal.limit - bal.used : null;
       }
+      const youtubeBlock = settings.watcher.autoBuild && pending.some((s) => s.tier === 1) ? await youtubeProblem(log) : undefined;
       const setDecision = d.prepare(`UPDATE watch_stories SET decision = ?, note = ?, decided_at = ? WHERE key = ?`);
       for (const s of pending) {
         // Final decisions stand; a new article can still lift a roundup story to tier 1.
         if (FINAL_DECISIONS.includes(s.decision) && s.decided_at !== now) continue;
-        const { decision, note } = decide({ story: s, alreadyCovered: covered.has(s.key), recentBuilds, creditsLeft, settings: settings.watcher, now: started });
+        const { decision, note } = decide({ story: s, alreadyCovered: covered.has(s.key), recentBuilds, creditsLeft, youtubeBlock, settings: settings.watcher, now: started });
         if (decision === s.decision && note === s.note && s.decided_at !== now) continue;
         setDecision.run(decision, note, now, s.key);
         if (decision === "would_build") recentBuilds.unshift(now);
@@ -620,7 +635,9 @@ export async function runWatcher(opts: { log?: (msg: string) => void } = {}): Pr
       const story = candidates.find((c) => c.key === key);
       if (story) {
         const bal = await elevenLabsBalance().catch(() => ({ available: false as const, reason: "" }));
-        const blocked = capacityBlock(builds, bal.available ? bal.limit - bal.used : null, settings.watcher, started);
+        const blocked =
+          capacityBlock(builds, bal.available ? bal.limit - bal.used : null, settings.watcher, started) ??
+          (settings.watcher.autoBuild ? await youtubeProblem(log) : undefined);
         if (blocked) {
           log(`Watcher: daily pick "${story.title}" not made: ${blocked}`);
         } else {

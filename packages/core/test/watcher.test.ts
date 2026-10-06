@@ -20,6 +20,16 @@ describe("decide", () => {
     expect(decide(gate())).toEqual({ decision: "would_build", note: "Dry run: nothing was built" });
   });
 
+  it("waits for a working YouTube sign-in before building, but not in a dry run", () => {
+    const why = "YouTube sign-in failed";
+    expect(decide(gate({ youtubeBlock: why }))).toEqual({ decision: "would_build", note: "Dry run: nothing was built" });
+    const live = gate({ youtubeBlock: why });
+    live.settings = { ...live.settings, autoBuild: true };
+    expect(decide(live)).toEqual({ decision: "blocked", note: why });
+    live.youtubeBlock = undefined;
+    expect(decide(live).decision).toBe("would_build");
+  });
+
   it("sends tier 2 to the roundup and ignores tier 0", () => {
     expect(decide(gate({ story: { tier: 2 } })).decision).toBe("roundup");
     expect(decide(gate({ story: { tier: 0 } })).decision).toBe("ignored");
