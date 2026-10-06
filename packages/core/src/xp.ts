@@ -286,20 +286,34 @@ export function collectXpEvents(): XpEvent[] {
   ];
 }
 
-export const getXp = (now = new Date()) => summarize(collectXpEvents(), now);
+/** The latest summary for other apps to show (Mission Control reads it), so they needn't work XP out themselves. */
+export const XP_SNAPSHOT = path.join(DATA_DIR, "xp.json");
+
+/** Works XP out and saves the snapshot. */
+export function getXp(now = new Date()): XpSummary {
+  const xp = summarize(collectXpEvents(), now);
+  try {
+    fs.writeFileSync(XP_SNAPSHOT, JSON.stringify({ ...xp, appLabels: APP_LABELS, updatedAt: now.toISOString() }));
+  } catch {
+    // A read-only data folder only costs the other apps their copy.
+  }
+  return xp;
+}
 
 const STATE_FILE = path.join(DATA_DIR, "xp-state.json");
 
 /**
- * Tells Telegram when a new level is reached. The first run only records the current level,
- * so turning this on doesn't announce every level earned so far.
+ * Refreshes the snapshot and, when `notify` is given, tells Telegram about a new level. The first run
+ * only records the current level, so turning this on doesn't announce every level earned so far.
  */
-export async function announceLevelUp(notify: (text: string) => Promise<boolean>): Promise<void> {
+export async function refreshXp(notify?: (text: string) => Promise<boolean>): Promise<void> {
   const xp = getXp();
+  if (!notify) return;
   const state = readJson<{ level: number }>(STATE_FILE);
   if (state && xp.level > state.level) {
     const next = xp.nextLevelAt - xp.total;
-    const sent = await notify(`⬆️ Level ${xp.level}: ${xp.title}!\n${xp.total} XP in total, ${next} XP to level ${xp.level + 1}.`);
+    const sent = await notify(`⬆️ Level ${xp.level}: ${xp.title}!
+${xp.total} XP in total, ${next} XP to level ${xp.level + 1}.`);
     if (!sent) return;
   }
   if (!state || xp.level !== state.level) fs.writeFileSync(STATE_FILE, JSON.stringify({ level: xp.level }));

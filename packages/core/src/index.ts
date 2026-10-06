@@ -8,4 +8,4 @@ export { createScriptProject } from "./fromScript";
 export { postDueComments } from "./comment";
 export { advanceAutopilot, handleTelegramButton, runWatcher } from "./watcher";
 export { notify, pollTelegram, telegramStatus } from "./telegram";
-export { announceLevelUp } from "./xp";
+export { refreshXp } from "./xp";
