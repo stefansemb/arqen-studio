@@ -10,7 +10,7 @@ import { DATA_DIR, PROJECTS_DIR, ROOT } from "./paths";
  * so it is retroactive and can never drift from reality. Only the last level announced on Telegram is stored.
  */
 
-export type XpApp = "studio" | "mission" | "thumbnails" | "motion" | "site";
+export type XpApp = "studio" | "mission" | "thumbnails" | "motion" | "shareimage" | "site";
 export type XpKind = "video" | "short" | "speedrun" | "commit" | "feature" | "release" | "render" | "task" | "workday" | "milestone" | "streak";
 
 export interface XpEvent {
@@ -49,6 +49,7 @@ export const APP_LABELS: Record<XpApp, string> = {
   mission: "Arqen Mission Control",
   thumbnails: "Arqen Thumbnails",
   motion: "Arqen Motion",
+  shareimage: "Arqen Share Image",
   site: "samidatools.com",
 };
 
@@ -125,7 +126,7 @@ export function summarize(events: XpEvent[], now = new Date()): XpSummary {
   const c: Counters = { video: 0, short: 0, speedrun: 0, feature: 0, release: 0, render: 0, task: 0, milestone: 0, streak: 0, bestDay: 0, apps: new Set() };
   const perDay = new Map<string, number>();
   const unlocked = new Map<string, string>();
-  const perApp: Record<XpApp, number> = { studio: 0, mission: 0, thumbnails: 0, motion: 0, site: 0 };
+  const perApp: Record<XpApp, number> = { studio: 0, mission: 0, thumbnails: 0, motion: 0, shareimage: 0, site: 0 };
   let total = 0;
   for (const e of all) {
     total += e.xp;
@@ -163,6 +164,7 @@ export const APP_DIRS: Record<Exclude<XpApp, "studio">, string> = {
   thumbnails: sibling(process.env.THUMBNAILS_DIR, "thumbnail-tool"),
   motion: sibling(process.env.MOTION_DIR, "Arqen Motion"),
   /** The site that shows the projects; other websites don't count. */
+  shareimage: sibling(process.env.SHARE_IMAGE_DIR, "Arqen Share Image"),
   site: sibling(process.env.SITE_DIR, "samidatools-site"),
 };
 
@@ -246,6 +248,7 @@ const BOARD_APPS: Record<string, XpApp> = {
   "arqen-mission-control": "mission",
   "arqen-thumbnail": "thumbnails",
   "arqen-motion": "motion",
+  "arqen-share-image": "shareimage",
   "samidatools-com": "site",
 };
 
@@ -304,6 +307,7 @@ export function collectXpEvents(): XpEvent[] {
     ...gitEvents("motion", APP_DIRS.motion),
     ...motionRenders(APP_DIRS.motion),
     ...progress("thumbnails", APP_DIRS.thumbnails, "prototyp"),
+    ...gitEvents("shareimage", APP_DIRS.shareimage),
     ...progress("site", APP_DIRS.site),
   ];
 }
