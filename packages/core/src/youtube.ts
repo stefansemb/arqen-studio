@@ -480,6 +480,14 @@ export async function postComment(videoId: string, text: string): Promise<string
   return ((await res.json()) as { id: string }).id;
 }
 
+/** The video's privacy on YouTube right now ("public", "unlisted", "private"), or undefined if it's gone. */
+export async function videoPrivacy(videoId: string): Promise<string | undefined> {
+  const res = await api("GET", `videos?part=status&id=${encodeURIComponent(videoId)}`);
+  if (!res.ok) throw await apiError(res, "Reading the video's status");
+  const item = ((await res.json()) as { items?: { status: { privacyStatus: string } }[] }).items?.[0];
+  return item?.status.privacyStatus;
+}
+
 /**
  * Answers YouTube Studio's "Paid promotion" question with No, so it isn't left open after an API upload.
  * A separate update after the upload: if YouTube rejects it, the video itself is unaffected.

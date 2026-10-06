@@ -34,6 +34,8 @@ export interface PublishInfo {
     playlistId?: string;
     /** The posted comment, or why posting failed (retried until it works). */
     comment?: { id?: string; postedAt?: string; error?: string };
+    /** Last time a private upload's real privacy was looked up (it may have been made public in YouTube Studio). */
+    privacyCheckedAt?: string;
   };
 }
 

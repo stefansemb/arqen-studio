@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { commentDue, composeComment } from "../src/comment";
+import { commentDue, composeComment, privacyCheckDue } from "../src/comment";
 import type { PublishInfo } from "../src/publish";
 
 const base = (youtube?: Partial<NonNullable<PublishInfo["youtube"]>>, comment = "Would you use it?"): PublishInfo => ({
@@ -58,5 +58,21 @@ describe("commentDue", () => {
       base({ privacy: "private", publishAt: "2026-10-01T11:30:00Z", comment: { error: "x", postedAt } });
     expect(commentDue(early("2026-10-01T11:57:00Z"), NOW)).toBe(false);
     expect(commentDue(early("2026-10-01T11:54:00Z"), NOW)).toBe(true);
+  });
+});
+
+describe("privacyCheckDue", () => {
+  it("looks up private, unscheduled uploads that may have been made public by hand", () => {
+    expect(privacyCheckDue(base({ privacy: "private" }), NOW)).toBe(true);
+    expect(privacyCheckDue(base({ privacy: "private", privacyCheckedAt: "2026-10-01T11:50:00Z" }), NOW)).toBe(false);
+    expect(privacyCheckDue(base({ privacy: "private", privacyCheckedAt: "2026-10-01T11:40:00Z" }), NOW)).toBe(true);
+  });
+
+  it("leaves public, scheduled, commented, comment-less and old uploads alone", () => {
+    expect(privacyCheckDue(base({ privacy: "public" }), NOW)).toBe(false);
+    expect(privacyCheckDue(base({ privacy: "private", publishAt: "2026-10-02T10:00:00Z" }), NOW)).toBe(false);
+    expect(privacyCheckDue(base({ privacy: "private", comment: { id: "c1" } }), NOW)).toBe(false);
+    expect(privacyCheckDue(base({ privacy: "private" }, " "), NOW)).toBe(false);
+    expect(privacyCheckDue(base({ privacy: "private", uploadedAt: "2026-09-01T00:00:00Z" }), NOW)).toBe(false);
   });
 });

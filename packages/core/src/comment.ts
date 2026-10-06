@@ -5,7 +5,7 @@ import { projectDir } from "./paths";
 import type { PublishInfo } from "./publish";
 import { readPublish } from "./publishStore";
 import { readAppSettings } from "./settings";
-import { connectionStatus, ensurePlaylist, postComment, YouTubeError } from "./youtube";
+import { connectionStatus, ensurePlaylist, postComment, videoPrivacy, YouTubeError } from "./youtube";
 import { withChannel, withProjectChannel } from "./channels";
 
 /**
@@ -24,6 +24,12 @@ const GO_LIVE_GRACE_MS = 3 * 60 * 1000;
 /** ...and failures within the first hour after going live are retried sooner. */
 const EARLY_RETRY_MS = 5 * 60 * 1000;
 const EARLY_WINDOW_MS = 60 * 60 * 1000;
+/**
+ * A video uploaded as private (not scheduled) is often made public by hand in YouTube Studio, which Studio
+ * can't see. Its status is looked up this often, for this long after the upload, so the comment still goes up.
+ */
+const PRIVACY_CHECK_MS = 15 * 60 * 1000;
+const PRIVACY_CHECK_DAYS = 14;
 
 export function composeComment(question: string, opts: { playlist?: { title: string; id: string }; subscribeUrl?: string }): string {
   const lines = [question.trim()];
@@ -43,6 +49,14 @@ export function commentDue(publish: PublishInfo, now = Date.now()): boolean {
   const failedAt = yt.comment?.postedAt ? Date.parse(yt.comment.postedAt) : 0;
   const retryMs = liveAt !== undefined && failedAt - liveAt < EARLY_WINDOW_MS ? EARLY_RETRY_MS : RETRY_MS;
   return live && now - failedAt >= retryMs;
+}
+
+/** Whether to ask YouTube if a private, unscheduled upload has been made public since. Pure. */
+export function privacyCheckDue(publish: PublishInfo, now = Date.now()): boolean {
+  const yt = publish.youtube;
+  if (!yt || !publish.comment?.trim() || yt.comment?.id || yt.publishAt || yt.privacy === "public") return false;
+  if (now - Date.parse(yt.uploadedAt) > PRIVACY_CHECK_DAYS * 24 * 3600_000) return false;
+  return !yt.privacyCheckedAt || now - Date.parse(yt.privacyCheckedAt) >= PRIVACY_CHECK_MS;
 }
 
 function savePublish(dir: string, publish: PublishInfo) {
@@ -89,8 +103,23 @@ export async function postDueComments(log: (msg: string) => void = console.log):
       return readAppSettings().pinnedComment.enabled && status.connected && status.canComment;
     });
   for (const p of listProjects()) {
-    const publish = readPublish(projectDir(p.id));
-    if (!publish || !commentDue(publish)) continue;
+    const dir = projectDir(p.id);
+    const publish = readPublish(dir);
+    if (!publish) continue;
+    if (privacyCheckDue(publish)) {
+      if (!allowed.has(p.channel_id)) allowed.set(p.channel_id, canComment(p.channel_id));
+      if (!allowed.get(p.channel_id)) continue;
+      try {
+        const privacy = await withProjectChannel(p.id, () => videoPrivacy(publish.youtube!.videoId));
+        publish.youtube = { ...publish.youtube!, privacy: privacy ?? publish.youtube!.privacy, privacyCheckedAt: new Date().toISOString() };
+        savePublish(dir, publish);
+        if (privacy === "public") log(`${publish.youtube.url} was made public in YouTube Studio (${p.id}); posting the comment`);
+      } catch (err) {
+        log(`Privacy check for ${p.id} failed: ${(err as Error).message}`);
+        continue;
+      }
+    }
+    if (!commentDue(publish)) continue;
     if (!allowed.has(p.channel_id)) allowed.set(p.channel_id, canComment(p.channel_id));
     if (!allowed.get(p.channel_id)) continue;
     try {
