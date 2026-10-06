@@ -28,6 +28,7 @@
     "./autopilot": "./src/autopilot.ts",
     "./news": "./src/news.ts",
     "./shorts": "./src/shorts.ts",
+    "./xp": "./src/xp.ts",
     "./watcher": "./src/watcher.ts",
     "./telegram": "./src/telegram.ts",
     "./ffmpeg": "./src/providers/ffmpeg.ts",

@@ -7,6 +7,7 @@ import type { ProjectRow } from "@yta/core/db";
 import type { VoiceChoice } from "@yta/core/tts";
 import { useDefaultVoice, VoicePicker } from "./VoicePicker";
 import { DemoPanel } from "./DemoPanel";
+import { XpBand } from "./XpBand";
 import { channelLabel, durationChoices, useChannels, type TemplateInfo } from "./useChannels";
 
 type ListedProject = ProjectRow & { youtubeTitle?: string; youtubeUrl?: string; channelName?: string };
@@ -301,6 +302,7 @@ export default function Home() {
 
   return (
     <main className="container stack">
+      <XpBand />
       <form className="panel stack" onSubmit={run}>
         <h2>New video</h2>
         {channels.length > 1 ? (

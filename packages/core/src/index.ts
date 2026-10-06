@@ -7,4 +7,5 @@ export { buildVideoProps } from "./props";
 export { createScriptProject } from "./fromScript";
 export { postDueComments } from "./comment";
 export { advanceAutopilot, handleTelegramButton, runWatcher } from "./watcher";
-export { pollTelegram, telegramStatus } from "./telegram";
+export { notify, pollTelegram, telegramStatus } from "./telegram";
+export { announceLevelUp } from "./xp";

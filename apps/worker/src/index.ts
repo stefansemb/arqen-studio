@@ -1,8 +1,10 @@
 import {
   advanceAutopilot,
+  announceLevelUp,
   claimJob,
   finishJob,
   handleTelegramButton,
+  notify,
   pollTelegram,
   postDueComments,
   requeueStaleJobs,
@@ -58,6 +60,9 @@ void telegramLoop();
 /** How often idle time is used to move auto-built watcher videos to their next stage. */
 const AUTOPILOT_CHECK_MS = 5_000;
 let lastAutopilotCheck = 0;
+/** How often idle time is used to check for a new XP level (it reads the git history of all Arqen apps). */
+const LEVEL_CHECK_MS = 10 * 60_000;
+let lastLevelCheck = 0;
 
 while (!stopping) {
   const job = claimJob();
@@ -69,6 +74,10 @@ while (!stopping) {
     if (Date.now() - lastCommentCheck >= COMMENT_CHECK_MS) {
       lastCommentCheck = Date.now();
       await postDueComments().catch((err) => console.error(err));
+    }
+    if (Date.now() - lastLevelCheck >= LEVEL_CHECK_MS) {
+      lastLevelCheck = Date.now();
+      if (telegramStatus().linked) await announceLevelUp(notify).catch((err) => console.error("XP:", (err as Error).message));
     }
     await new Promise((r) => setTimeout(r, POLL_MS));
     continue;
