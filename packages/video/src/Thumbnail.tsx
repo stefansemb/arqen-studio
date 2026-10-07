@@ -35,6 +35,11 @@ export interface ThumbnailProps {
    * below) instead of a tinted backdrop, which he and the text gradient mostly cover.
    */
   imageCard?: boolean;
+  /**
+   * Launch layout for a new model or product: the name ("HAIKU 5.5") on one huge line across the top, the
+   * picture as a big card below it, the presenter smaller at the bottom right. No arrow or bubble.
+   */
+  launch?: boolean;
   /** Draws the labelled cell grid (THUMB_GRID) used when asking which cell holds the thing to point at. */
   grid?: boolean;
 }
@@ -46,6 +51,13 @@ export const PRESENTER_BOX = { right: 20, height: 690, maxWidth: 700 };
 
 /** The image card's box (before its slight tilt), under the channel name. */
 const CARD = { left: 64, top: 104, width: 470, height: 264 };
+/** The launch layout's card, below the one-line name. */
+const LAUNCH_CARD = { left: 48, top: 252, width: 690, height: 388 };
+/**
+ * The launch layout's presenter is bigger and cut off just below the elbows (the cut-out runs past the bottom
+ * edge), with his head under the name instead of over it.
+ */
+const LAUNCH_PRESENTER = { height: 790, bottom: -270, maxWidth: 900, right: -40 };
 
 export const THUMB_WIDTH = 1280;
 export const THUMB_HEIGHT = 720;
@@ -136,22 +148,26 @@ function placeBubble(text: string, cross: boolean, presenterEdge?: number[]) {
   return { fontSize, width, height, left: right - width, top, head: { x: edge + 10, y: headTop + 110 } };
 }
 
-export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlightBox, image, presenter, channel, badge, layout, theme: overrides, arrow, presenterEdge, grid, bubble, imageCard }) => {
+export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlightBox, image, presenter, channel, badge, layout, theme: overrides, arrow, presenterEdge, grid, bubble, imageCard, launch: launchProp }) => {
   const theme = resolveTheme(overrides);
-  const rows = lines(text);
+  const launch = Boolean(launchProp && presenter);
+  const rows = launch ? [text.toUpperCase().trim()] : lines(text);
   const longest = Math.max(...rows.map((r) => r.length), 1);
   // The presenter takes the right side, so the text column is a little narrower.
   const textWidth = layout === "full" && !presenter ? 1170 : presenter ? 640 : 700;
   // Big enough to read on a phone, small enough that the longest line fits the text column (heavy caps run ~0.64em a letter).
-  const card = Boolean(imageCard && presenter && image);
+  const card = Boolean((imageCard || launch) && presenter && image);
+  const cardBox = launch ? LAUNCH_CARD : CARD;
   // The card takes the top of the text column, so the headline gets the space below it.
-  const textTop = card ? CARD.top + CARD.height + 10 : 120;
-  const fontSize = Math.min(presenter ? 190 : 210, Math.floor(textWidth / (0.64 * longest)), Math.floor((card ? 290 : 520) / rows.length));
+  const textTop = launch ? 14 : card ? CARD.top + CARD.height + 10 : 120;
+  const fontSize = launch
+    ? Math.min(250, Math.floor(1200 / (0.64 * longest)))
+    : Math.min(presenter ? 190 : 210, Math.floor(textWidth / (0.64 * longest)), Math.floor((card ? 290 : 520) / rows.length));
   const hl = highlight?.toUpperCase().replace(/[^\p{L}\p{N}$%]/gu, "");
   // The arrow needs the headline's real line boxes (lines can wrap inside the column), measured once laid out.
   const column = useRef<HTMLDivElement>(null);
   const [lineBoxes, setLineBoxes] = useState<Line[] | null>(null);
-  const [handle] = useState(() => (arrow ? delayRender("Measuring the headline for the arrow") : null));
+  const [handle] = useState(() => (arrow && !launch ? delayRender("Measuring the headline for the arrow") : null));
   useEffect(() => {
     if (handle === null) return;
     void document.fonts.ready.then(() => {
@@ -167,7 +183,7 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlight
       continueRender(handle);
     });
   }, [handle]);
-  const arrowShape = arrow && lineBoxes ? placeArrow(arrow, lineBoxes, presenterEdge) : null;
+  const arrowShape = arrow && !launch && lineBoxes ? placeArrow(arrow, lineBoxes, presenterEdge) : null;
 
   // Background photos come from articles and stock sites in every colour imaginable. They are
   // turned grey and re-tinted in the channel's accent colors so every thumbnail shares one palette.
@@ -175,6 +191,37 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlight
     layout === "full"
       ? { position: "absolute", inset: 0 }
       : { position: "absolute", right: 0, top: 0, width: "62%", height: "100%" };
+
+  const presenterEl = presenter ? (
+        <>
+          {/* Glow behind the presenter so the cut-out separates from dark backgrounds. */}
+          <div
+            style={{
+              position: "absolute",
+              right: 40,
+              bottom: -120,
+              width: 620,
+              height: 620,
+              borderRadius: "50%",
+              background: `radial-gradient(circle, ${theme.accent}aa 0%, ${theme.accent}33 45%, transparent 70%)`,
+            }}
+          />
+          <Img
+            src={presenter}
+            style={{
+              position: "absolute",
+              // Past the right edge in the launch layout, so the photo's cut side is out of frame.
+              right: launch ? LAUNCH_PRESENTER.right : PRESENTER_BOX.right,
+              bottom: launch ? LAUNCH_PRESENTER.bottom : 0,
+              height: launch ? LAUNCH_PRESENTER.height : PRESENTER_BOX.height,
+              maxWidth: launch ? LAUNCH_PRESENTER.maxWidth : PRESENTER_BOX.maxWidth,
+              objectFit: "contain",
+              objectPosition: "bottom right",
+              filter: `drop-shadow(0 0 3px ${theme.accent2}) drop-shadow(0 18px 40px #000c)`,
+            }}
+          />
+        </>
+  ) : null;
 
   return (
     <AbsoluteFill style={{ backgroundColor: theme.bg, fontFamily: theme.font, overflow: "hidden" }}>
@@ -225,10 +272,10 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlight
         <div
           style={{
             position: "absolute",
-            left: CARD.left,
-            top: CARD.top,
-            width: CARD.width,
-            height: CARD.height,
+            left: cardBox.left,
+            top: cardBox.top,
+            width: cardBox.width,
+            height: cardBox.height,
             transform: "rotate(-2.5deg)",
             borderRadius: 18,
             overflow: "hidden",
@@ -240,37 +287,9 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlight
         </div>
       ) : null}
 
-      {presenter ? (
-        <>
-          {/* Glow behind the presenter so the cut-out separates from dark backgrounds. */}
-          <div
-            style={{
-              position: "absolute",
-              right: 40,
-              bottom: -120,
-              width: 620,
-              height: 620,
-              borderRadius: "50%",
-              background: `radial-gradient(circle, ${theme.accent}aa 0%, ${theme.accent}33 45%, transparent 70%)`,
-            }}
-          />
-          <Img
-            src={presenter}
-            style={{
-              position: "absolute",
-              right: PRESENTER_BOX.right,
-              bottom: 0,
-              height: PRESENTER_BOX.height,
-              maxWidth: PRESENTER_BOX.maxWidth,
-              objectFit: "contain",
-              objectPosition: "bottom right",
-              filter: `drop-shadow(0 0 3px ${theme.accent2}) drop-shadow(0 18px 40px #000c)`,
-            }}
-          />
-        </>
-      ) : null}
+      {!launch ? presenterEl : null}
 
-      <div style={{ position: "absolute", left: 56, top: 44, display: "flex", alignItems: "center", gap: 12 }}>
+      <div style={{ position: "absolute", left: 56, ...(launch ? { bottom: 22 } : { top: 44 }), display: "flex", alignItems: "center", gap: 12 }}>
         <div style={{ width: 12, height: 34, background: theme.accent, borderRadius: 3 }} />
         <span style={{ color: "#fff", fontWeight: 800, fontSize: 30, letterSpacing: 2, textTransform: "uppercase" }}>{channel}</span>
         {badge ? (
@@ -284,16 +303,16 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlight
         ref={column}
         style={{
           position: "absolute",
-          left: 56,
+          left: launch ? 40 : 56,
           top: textTop,
-          bottom: 50,
-          width: textWidth,
+          bottom: launch ? undefined : 50,
+          width: launch ? 1200 : textWidth,
           display: "flex",
           flexDirection: "column",
-          justifyContent: "center",
+          justifyContent: launch ? "flex-start" : "center",
         }}
       >
-        <div style={{ order: 1, marginTop: 22, width: 150, height: 12, borderRadius: 6, background: theme.accent }} />
+        {launch ? null : <div style={{ order: 1, marginTop: 22, width: 150, height: 12, borderRadius: 6, background: theme.accent }} />}
         {rows.map((row, i) => (
           <div
             key={i}
@@ -352,7 +371,9 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlight
         </svg>
       ) : null}
 
-      {presenter && bubble?.text ? <ThoughtBubble {...bubble} edge={presenterEdge} /> : null}
+      {launch ? presenterEl : null}
+
+      {presenter && bubble?.text && !launch ? <ThoughtBubble {...bubble} edge={presenterEdge} /> : null}
 
       {grid ? (
         <svg width={THUMB_WIDTH} height={THUMB_HEIGHT} style={{ position: "absolute", inset: 0 }}>

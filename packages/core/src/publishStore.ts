@@ -47,6 +47,7 @@ export function savePublishEdits(projectId: string, edit: PublishEdit): PublishI
         text: String(t.text ?? "").trim().slice(0, 60),
         highlight: String(t.highlight ?? "").trim().slice(0, 30),
         ...(t.gesture ? { gesture: String(t.gesture).trim().slice(0, 40) } : {}),
+        ...(t.launch ? { launch: true } : {}),
         ...(t.bubble?.text?.trim() ? { bubble: { text: String(t.bubble.text).trim().slice(0, 24), ...(t.bubble.cross ? { cross: true } : {}) } } : {}),
       }))
       .filter((t) => t.text);

@@ -27,6 +27,7 @@ const MetadataSchema = z.object({
         gesture: z.string().describe("Presenter gesture from the list in the instructions, or empty if there is none"),
         bubble: z.string().describe("Presenter thought bubble, 1-3 words, or empty; see the instructions"),
         bubbleCross: z.boolean().describe("Cross the bubble out with a red X"),
+        launch: z.boolean().describe("Launch layout: true only when text is just the new product's name and version"),
       }),
     )
     .describe("3 thumbnail text options following the thumbnail text rules"),
@@ -79,7 +80,10 @@ Use pointing(-serious) or presenting-left(-serious) to show off a new product or
 Use a different gesture for each option. Available: ${gestures.join(", ")}.
 Thought bubble: when the story has a twist the presenter can react to, put 1-3 words in a bubble by his head that complete the joke
 or the contradiction, not repeat the text (e.g. text 'It Said "I Love You"', bubble "Mike?" crossed out; text "GPT-6 Delayed", bubble "Again?").
-Set bubbleCross for something wrong, denied or fake. Leave the bubble empty when nothing fits; a forced bubble is worse than none.${
+Set bubbleCross for something wrong, denied or fake. Leave the bubble empty when nothing fits; a forced bubble is worse than none.
+Launch layout: when the story is the release of a new model or product, make the FIRST option a launch thumbnail: launch true, text
+is only the name with its version ("Haiku 5.5", "GPT-6 Luna", "Gemini 4 Pro"), highlight the version number ("5.5"), no bubble.
+It is set on one huge line across the top, so keep it under 12 characters. Never use launch for other stories.${
             recent.length ? `\nThe latest videos already used ${[...new Set(recent)].join(" and ")} on their thumbnail; the first option must use a different gesture so the channel grid doesn't repeat the same face.` : ""
           }`
         : ""
@@ -133,7 +137,8 @@ ${script.hook ? `Hook: ${script.hook}\n` : ""}${script.cta ? `CTA: ${script.cta}
       text: stripDashes(t.text, " "),
       highlight: t.highlight.trim(),
       ...(leadGestures[i] ? { gesture: leadGestures[i] } : {}),
-      ...(gestures.length && t.bubble.trim()
+      ...(gestures.length && t.launch ? { launch: true } : {}),
+      ...(gestures.length && t.bubble.trim() && !t.launch
         ? { bubble: { text: stripDashes(t.bubble, " ").slice(0, 24), ...(t.bubbleCross ? { cross: true } : {}) } }
         : {}),
     })),

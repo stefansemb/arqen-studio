@@ -128,7 +128,8 @@ export async function renderThumbnails(ctx: StepContext): Promise<void> {
         badge,
         layout,
         theme: getChannel().theme,
-        ...(presenter && text.bubble ? { bubble: text.bubble } : {}),
+        ...(presenter && text.bubble && !text.launch ? { bubble: text.bubble } : {}),
+        ...(presenter && text.launch ? { launch: true } : {}),
         // Beside the presenter a tinted backdrop is mostly hidden; a card in real colors shows what the story is.
         ...(presenter && background ? { imageCard: true } : {}),
       };
@@ -158,7 +159,7 @@ export async function renderThumbnails(ctx: StepContext): Promise<void> {
       try {
         for (const [i, v] of variants.entries()) {
           // A bubble is already the prop; an arrow as well would clutter the picture.
-          if (!v.presenter || props[i].bubble) continue;
+          if (!v.presenter || props[i].bubble || props[i].launch) continue;
           props[i] = { ...props[i], arrow: { to: "text" }, presenterEdge: await presenterEdges(path.join(ctx.dir, v.presenter)) };
           variants[i] = { ...v, arrow: { to: "text" } };
         }

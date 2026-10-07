@@ -266,6 +266,17 @@ export function PublishPanel(props: {
                   setTextsDirty(true);
                 }}
               />
+              <label className="row muted" style={{ gap: 4, fontSize: 12, flex: "none" }} title="Launch layout: the name huge across the top, big picture card">
+                <input
+                  type="checkbox"
+                  checked={Boolean(t.launch)}
+                  onChange={(e) => {
+                    setTexts(texts.map((x, j) => (j === i ? { ...x, launch: e.target.checked } : x)));
+                    setTextsDirty(true);
+                  }}
+                />
+                Launch
+              </label>
               <label className="row muted" style={{ gap: 4, fontSize: 12, flex: "none" }} title="Cross the bubble out with a red X">
                 <input
                   type="checkbox"

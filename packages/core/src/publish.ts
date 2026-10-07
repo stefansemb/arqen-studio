@@ -51,6 +51,8 @@ export interface ThumbnailText {
   gesture?: string;
   /** Thought bubble by the presenter's head: 1-3 words, optionally crossed out in red ("NOT MIKE"). */
   bubble?: { text: string; cross?: boolean };
+  /** Launch layout: the product name huge across the top and a big picture card (needs the presenter). */
+  launch?: boolean;
 }
 
 export interface ThumbnailVariant extends ThumbnailText {

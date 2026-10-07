@@ -88,13 +88,14 @@ export function recentGestures(projectDir: string, count = 2): string[] {
 }
 
 /**
- * Makes sure the first (used) option doesn't repeat a recently used gesture: swaps with another
+ * Makes sure the first (used) option doesn't repeat a recently used gesture or lead with surprised: swaps with another
  * option that is fresh, or takes a fresh unused gesture. Surprised is never pulled in as the lead,
  * it is meant for shocking news only. Pure, so it can be unit tested.
  */
 export function freshLead(chosen: (string | undefined)[], recent: string[], available: string[]): (string | undefined)[] {
   const out = [...chosen];
-  if (!out.length || !out[0] || !recent.includes(out[0])) return out;
+  // The model puts surprised first now and then despite the prompt; it is only for truly shocking news.
+  if (!out.length || !out[0] || (!recent.includes(out[0]) && out[0] !== "surprised")) return out;
   const ok = (g: string | undefined): g is string => Boolean(g) && !recent.includes(g!) && g !== "surprised";
   const swap = out.findIndex((g, i) => i > 0 && ok(g));
   if (swap > 0) {

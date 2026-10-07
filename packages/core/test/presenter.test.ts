@@ -63,3 +63,9 @@ describe("recentGestures", () => {
     expect(recentGestures(path.join(root, "self"))).toEqual(["thinking", "pointing"]);
   });
 });
+
+describe("freshLead with surprised", () => {
+  it("never leads with surprised, even when it is fresh", () => {
+    expect(freshLead(["surprised", "comparing", "thinking"], [], ["comparing", "surprised", "thinking"])).toEqual(["comparing", "surprised", "thinking"]);
+  });
+});
