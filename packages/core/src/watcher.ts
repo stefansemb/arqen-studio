@@ -27,7 +27,8 @@ import { startUpload } from "./uploadRequest";
 import { makeVideoPrivate, uploadReady } from "./youtube";
 import { notify } from "./telegram";
 import type { Brief } from "./steps/script";
-import type { ScriptCheck } from "./types";
+import type { PacingReport, ScriptCheck } from "./types";
+import type { VerifyReport } from "./verify";
 import { readAppSettings, type AppSettings } from "./settings";
 
 /** Labs' own feeds (fastest, official). The general press feeds come from autopilot settings. */
@@ -715,6 +716,22 @@ export function planAdvance(
 
 const clock = (iso: string) => new Date(iso).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
 
+/** The render's contact sheet with its check warnings and pacing notes, for a quick look before the video goes live. */
+export function renderReview(dir: string): { text: string; photo?: string } | null {
+  const read = <T>(f: string): T | null => (fs.existsSync(path.join(dir, f)) ? (JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")) as T) : null);
+  const verify = read<VerifyReport>("verify.json");
+  if (!verify) return null;
+  const pacing = read<PacingReport>("pacing.json");
+  const notes = [
+    ...verify.checks.filter((c) => !c.ok).map((c) => `• ${c.name}: ${c.detail}`),
+    ...(pacing?.warnings ?? []).slice(0, 5).map((w) => `• ${w.detail}`),
+  ];
+  const more = (pacing?.warnings.length ?? 0) > 5 ? `\n…and ${pacing!.warnings.length - 5} more pacing notes in the Studio` : "";
+  const text = `🧾 Render check passed${pacing ? ` · ${pacing.scenesPerMin} scenes/min` : ""}${notes.length ? `\n\n${notes.join("\n")}${more}` : ", no notes"}`;
+  const photo = verify.sheet ? path.join(dir, verify.sheet) : undefined;
+  return { text, photo: photo && fs.existsSync(photo) ? photo : undefined };
+}
+
 /** Moves auto-built stories along. Cheap; the worker calls it between jobs. */
 export async function advanceAutopilot(log: (msg: string) => void = console.log): Promise<void> {
   const d = db();
@@ -773,6 +790,8 @@ Tap Stop to keep it private.`, {
         photo: thumb ? path.join(dir, thumb.file) : undefined,
         buttons: [{ text: "🛑 Stop", data: `stop:${id}` }],
       });
+      const review = renderReview(dir);
+      if (review) await say(review.text, { photo: review.photo });
     } else {
       setStage.run("failed", action.reason, s.key);
       await say(`❌ Auto video failed: ${action.reason}

@@ -8,6 +8,8 @@ import { renderMedia, selectComposition } from "@remotion/renderer";
 import type { StepContext } from "../context";
 import { buildVideoProps } from "../props";
 import { renderMotionClips } from "./motion";
+import { writePacingReport } from "../pacing";
+import { verifyRender } from "../verify";
 
 const MIME: Record<string, string> = {
   ".mp3": "audio/mpeg",
@@ -65,6 +67,8 @@ export function getBundle(): Promise<string> {
 export async function renderVideo(ctx: StepContext): Promise<void> {
   // Graphics first, so scenes edited since the last render get fresh clips.
   await renderMotionClips(ctx);
+  // Scenes may have been edited since planning; report pacing on what is actually rendered.
+  writePacingReport(ctx);
   const server = await serveDir(ctx.dir);
   try {
     const { port } = server.address() as AddressInfo;
@@ -96,6 +100,28 @@ export async function renderVideo(ctx: StepContext): Promise<void> {
     });
     fs.renameSync(tmpOut, out);
     ctx.log(`Rendered output.mp4 in ${((Date.now() - started) / 1000).toFixed(0)} s`);
+
+    // Check the file itself: a failed check stops the step, so the autopilot never uploads a broken video.
+    const fps = composition.fps;
+    const offset = (inputProps.introSec ?? 0) + (inputProps.leadInSec ?? 0);
+    const total = composition.durationInFrames / fps;
+    const sheetTimes = [
+      Math.min(0.5, total / 2),
+      ...inputProps.scenes.map((s) => offset + s.start + Math.min(0.9, (s.end - s.start) / 2)),
+      Math.max(0, total - 1),
+    ];
+    const report = await verifyRender(out, {
+      durationSec: total,
+      width: composition.width,
+      height: composition.height,
+      fps,
+      narration: [offset, offset + inputProps.durationSec],
+    }, sheetTimes);
+    fs.writeFileSync(path.join(ctx.dir, "verify.json"), JSON.stringify(report, null, 2));
+    for (const c of report.checks) if (!c.ok) ctx.log(`Render check ${c.name}: ${c.detail}`, c.level === "fail" ? "error" : "warn");
+    const failed = report.checks.filter((c) => !c.ok && c.level === "fail");
+    if (failed.length) throw new Error(`Render check failed: ${failed.map((c) => `${c.name} (${c.detail})`).join("; ")}`);
+    ctx.log(`Render check passed (${report.checks.filter((c) => !c.ok).length} warnings)`);
   } finally {
     server.close();
   }

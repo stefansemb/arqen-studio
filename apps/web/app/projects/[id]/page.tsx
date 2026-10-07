@@ -18,6 +18,8 @@ import { useDefaultVoice, VoicePicker } from "../../VoicePicker";
 import type { VoiceChoice } from "@yta/core/tts";
 import { ZoomControls } from "./ZoomControls";
 import type { ZoomSettings } from "@yta/core/zoom";
+import type { PacingReport, VerifyReport } from "@yta/core/verify";
+import { RenderChecks } from "./RenderChecks";
 
 interface Detail {
   project: ProjectRow;
@@ -35,6 +37,8 @@ interface Detail {
   previewProps: NewsVideoProps | null;
   graphicTemplates?: GraphicTemplate[];
   output: { mtime: number; path: string } | null;
+  verify: VerifyReport | null;
+  pacing: PacingReport | null;
 }
 
 type StepState = "pending" | "running" | "done" | "failed" | "skipped";
@@ -428,6 +432,7 @@ export default function ProjectPage() {
                     </a>
                     <span className="muted" style={{ fontSize: 12 }}>{d.output.path}</span>
                   </div>
+                  <RenderChecks projectId={id} verify={d.verify} pacing={d.pacing} mtime={d.output.mtime} />
                 </>
               ) : (
                 <div className="muted">Not rendered yet.</div>

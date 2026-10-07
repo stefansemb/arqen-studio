@@ -8,6 +8,7 @@ import { normalizeScenes, wordsToSentences } from "../timing";
 import type { Article, ClipInfo, PlannedScene, Timings } from "../types";
 import { planDemoScenes } from "../demo/project";
 import { graphicTemplates, graphicValues, motionDir } from "../providers/motion";
+import { PACE, splitLongScenes, writePacingReport } from "../pacing";
 
 /** A timeline needs at least three events at different dates; one date with three things is not a timeline. */
 export function isRealTimeline(events: { when: string; what: string }[] | null | undefined): boolean {
@@ -134,6 +135,7 @@ ${graphics.map((g) => `  - ${g.id}: ${g.description} Use when: ${g.use}\n    Fie
     : ""
 }${template.sceneGuidance}`,
     prompt: `Plan about ${target} scenes (roughly one every ${sceneSec} seconds; never longer than ${clips.length ? 20 : Math.max(15, sceneSec + 6)} seconds).
+The first ${PACE.hookEnd} seconds are the hook, where viewers decide to stay: change the picture at least every ${PACE.hook} seconds there, keep an opening title card under 5 seconds and make its text say what the video promises.
 Scenes must be listed in order, the first must start at sentence 0, and each scene lasts until the next one starts.
 Avoid more than two card scenes (title/quote/stat${motion ? "/timeline/compare" : ""}${graphics.length ? "/graphic" : ""}) in a row. Don't repeat the same stock query.
 ${articleImages ? `The source article has ${articleImages} image(s) available for "article" scenes; use at most ${articleImages}.` : `There are no article images, so do not use "article" scenes.`}
@@ -184,8 +186,10 @@ ${sentences.map((s) => `[${s.index}] ${s.start.toFixed(1)}-${s.end.toFixed(1)}: 
       return { ...scene, clip: clip.id, clipStart, clipEnd, query: undefined };
     });
 
-  const normalized = normalizeScenes(planned, timings.durationSec);
+  const { scenes: normalized, splits } = splitLongScenes(normalizeScenes(planned, timings.durationSec), sentences);
   writeJson(ctx, "scenes.json", normalized);
+  if (splits) ctx.log(`Split long B-roll ${splits} time(s) so the picture changes often enough`);
+  writePacingReport(ctx);
   const longest = Math.max(...normalized.map((s) => s.end - s.start));
   const clipScenes = normalized.filter((s) => s.type === "clip");
   const unused = clips.filter((c) => !clipScenes.some((s) => s.clip === c.id)).map((c) => c.id);

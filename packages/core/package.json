@@ -33,7 +33,8 @@
     "./telegram": "./src/telegram.ts",
     "./ffmpeg": "./src/providers/ffmpeg.ts",
     "./motion": "./src/providers/motion.ts",
-    "./imageSwap": "./src/imageSwap.ts"
+    "./imageSwap": "./src/imageSwap.ts",
+    "./verify": "./src/verify.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",

@@ -158,7 +158,24 @@ const CheckSchema = z.object({
       problem: z.string(),
     }),
   ),
+  hook: z.object({
+    promise: z.string().describe("What the hook promises the viewer gets by watching, in one sentence"),
+    payoffSegment: z.number().int().describe("Number of the [SEGMENT n] that delivers that promise; 0 if none does"),
+    teased: z.array(z.string()).describe("Each story, result or question the hook teases, 2-6 words each"),
+    issues: z.array(z.string()).describe("Hook problems, one sentence each; empty if the hook works"),
+  }),
 });
+
+/** The script with its parts labeled, so the hook review can name the segment that pays it off. */
+function labeledScript(s: Script): string {
+  return [
+    `[HOOK]\n${s.hook}`,
+    ...s.segments.map((seg, i) => `[SEGMENT ${i + 1}${seg.heading ? `: ${seg.heading}` : ""}]\n${seg.text}`),
+    s.cta.trim() ? `[CTA]\n${s.cta}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
 
 /** Fact-checks the script against the source so invented details are caught before paying for TTS. */
 export async function checkScript(ctx: StepContext): Promise<void> {
@@ -169,7 +186,7 @@ export async function checkScript(ctx: StepContext): Promise<void> {
   const fromNotes = ctx.project.source_type === "notes";
   const channel = channelName();
 
-  const { issues } = await generateStructured({
+  const { issues, hook } = await generateStructured({
     schema: CheckSchema,
     effort: "low",
     system: `You are a meticulous fact-checker for a YouTube channel. Compare a narration script against its source (${
@@ -179,18 +196,25 @@ export async function checkScript(ctx: StepContext): Promise<void> {
 Use severity "high" for invented or wrong facts and misattributed quotes, "low" for overstatements or speculation not clearly framed as analysis.
 Clearly-labeled opinion and general background knowledge are fine. The closing call to action (subscribe, comment${channel ? `, the channel name "${channel}"` : ""}) is not a factual claim; ignore it. Return an empty list if everything checks out.
 
+Then review the [HOOK] as a retention editor; this never changes the fact issues above. Its first sentence must give a concrete reason to keep
+watching (a specific promise, stake or surprise), not a greeting or a generic intro. Report as hook issues: a promise or tease that no segment
+pays off, a hook too vague to promise anything specific, a hook that gives the whole payoff away so there is nothing left to wait for, or a hook
+that names the channel or asks to subscribe.
+
 <source>
 ${article.text}
 ${clips.length ? clipLog(clips) : ""}
 </source>
 
 <script>
-${text}
+${labeledScript(script)}
 </script>`,
   });
 
-  const result: ScriptCheck = { ok: !issues.some((i) => i.severity === "high"), wordCount: countWords(text), issues };
+  const result: ScriptCheck = { ok: !issues.some((i) => i.severity === "high"), wordCount: countWords(text), issues, hook };
   writeJson(ctx, "script-check.json", result);
   for (const i of issues) ctx.log(`[${i.severity}] "${i.claim}": ${i.problem}`, i.severity === "high" ? "warn" : "info");
+  ctx.log(`Hook promises: ${hook.promise} (paid off in ${hook.payoffSegment ? `segment ${hook.payoffSegment}` : "no segment"})`, hook.payoffSegment ? "info" : "warn");
+  for (const h of hook.issues) ctx.log(`Hook: ${h}`, "warn");
   ctx.log(result.ok ? `Script check passed (${issues.length} minor notes)` : "Script check found unsupported claims; review script.json before publishing", result.ok ? "info" : "warn");
 }

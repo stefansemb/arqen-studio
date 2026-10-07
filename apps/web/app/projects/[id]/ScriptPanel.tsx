@@ -13,6 +13,7 @@ export interface PanelCheck {
   ok: boolean;
   wordCount: number;
   issues: { severity: string; claim: string; problem: string }[];
+  hook?: { promise: string; payoffSegment: number; issues: string[] };
 }
 
 const WORDS_PER_MINUTE = 150;
@@ -139,6 +140,18 @@ export function ScriptPanel(props: {
               {check.issues.map((iss, i) => (
                 <div key={i}>
                   [{iss.severity}] {iss.claim} ({iss.problem})
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {check?.hook ? (
+            <div className="muted" style={{ marginBottom: 12, fontSize: 12 }}>
+              <div>
+                Hook promise: {check.hook.promise} ({check.hook.payoffSegment ? `paid off in segment ${check.hook.payoffSegment}` : "no segment pays it off"})
+              </div>
+              {check.hook.issues.map((h, i) => (
+                <div key={i}>
+                  [hook] {h}
                 </div>
               ))}
             </div>

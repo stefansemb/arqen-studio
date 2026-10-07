@@ -104,4 +104,27 @@ export interface ScriptCheck {
   ok: boolean;
   wordCount: number;
   issues: { severity: "high" | "low"; claim: string; problem: string }[];
+  /** Hook review from the same call; absent in checks made before it existed. Never affects `ok`. */
+  hook?: HookCheck;
+}
+
+export interface HookCheck {
+  /** What the hook promises the viewer, in one sentence. */
+  promise: string;
+  /** 1-based index of the segment that delivers the promise; 0 = no segment does. */
+  payoffSegment: number;
+  /** Things the hook teases (stories, results); each should be paid off later. */
+  teased: string[];
+  issues: string[];
+}
+
+/** pacing.json: scene pacing and the hook gate, written when scenes are planned and again before each render. */
+export interface PacingReport {
+  /** Scene changes per minute of narration. */
+  scenesPerMin: number;
+  /** Longest scene per part of the video, seconds. */
+  longest: { hook: number; early: number; body: number };
+  /** Open loops: what the hook promises and when (narration seconds) it is planted and paid off. */
+  loops: { question: string; planted: number; payoff: number | null }[];
+  warnings: { at: number; kind: string; detail: string }[];
 }

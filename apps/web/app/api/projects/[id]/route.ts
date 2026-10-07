@@ -30,6 +30,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     clips: readJson(dir, "clips.json"),
     settings: readSettings(id),
     publish: readJson(dir, "publish.json"),
+    verify: readJson(dir, "verify.json"),
+    pacing: readJson(dir, "pacing.json"),
     previewProps: buildVideoProps(id, `/api/files/${id}`),
     // Further Arqen Motion templates the scene editor can switch a scene to.
     graphicTemplates: graphicTemplates(),
