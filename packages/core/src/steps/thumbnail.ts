@@ -101,6 +101,8 @@ export async function renderThumbnails(ctx: StepContext): Promise<void> {
         layout,
         theme: getChannel().theme,
         ...(presenter && text.bubble ? { bubble: text.bubble } : {}),
+        // Beside the presenter a tinted backdrop is mostly hidden; a card in real colors shows what the story is.
+        ...(presenter && background ? { imageCard: true } : {}),
       };
       props.push(inputProps);
       variants.push({ ...text, ...(gesture ? { gesture } : {}), file: `thumbs/thumb-${i}.jpg`, background, presenter, layout });

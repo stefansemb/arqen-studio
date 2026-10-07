@@ -30,6 +30,11 @@ export interface ThumbnailProps {
   presenterEdge?: number[];
   /** Thought bubble by the presenter's head (needs presenter; placed with presenterEdge when given). */
   bubble?: { text: string; cross?: boolean };
+  /**
+   * With the presenter: show the background image as a framed card in its real colors (top left, headline
+   * below) instead of a tinted backdrop, which he and the text gradient mostly cover.
+   */
+  imageCard?: boolean;
   /** Draws the labelled cell grid (THUMB_GRID) used when asking which cell holds the thing to point at. */
   grid?: boolean;
 }
@@ -38,6 +43,9 @@ export interface ThumbnailProps {
 export const THUMB_GRID = { cols: 8, rows: 6, cellW: 160, cellH: 120 };
 /** Where the presenter cut-out is fitted (bottom right); core reads his edge with the same numbers. */
 export const PRESENTER_BOX = { right: 20, height: 690, maxWidth: 700 };
+
+/** The image card's box (before its slight tilt), under the channel name. */
+const CARD = { left: 64, top: 104, width: 470, height: 264 };
 
 export const THUMB_WIDTH = 1280;
 export const THUMB_HEIGHT = 720;
@@ -128,14 +136,17 @@ function placeBubble(text: string, cross: boolean, presenterEdge?: number[]) {
   return { fontSize, width, height, left: right - width, top, head: { x: edge + 10, y: headTop + 110 } };
 }
 
-export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlightBox, image, presenter, channel, badge, layout, theme: overrides, arrow, presenterEdge, grid, bubble }) => {
+export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlightBox, image, presenter, channel, badge, layout, theme: overrides, arrow, presenterEdge, grid, bubble, imageCard }) => {
   const theme = resolveTheme(overrides);
   const rows = lines(text);
   const longest = Math.max(...rows.map((r) => r.length), 1);
   // The presenter takes the right side, so the text column is a little narrower.
   const textWidth = layout === "full" && !presenter ? 1170 : presenter ? 640 : 700;
   // Big enough to read on a phone, small enough that the longest line fits the text column (heavy caps run ~0.64em a letter).
-  const fontSize = Math.min(presenter ? 190 : 210, Math.floor(textWidth / (0.64 * longest)), Math.floor(520 / rows.length));
+  const card = Boolean(imageCard && presenter && image);
+  // The card takes the top of the text column, so the headline gets the space below it.
+  const textTop = card ? CARD.top + CARD.height + 10 : 120;
+  const fontSize = Math.min(presenter ? 190 : 210, Math.floor(textWidth / (0.64 * longest)), Math.floor((card ? 290 : 520) / rows.length));
   const hl = highlight?.toUpperCase().replace(/[^\p{L}\p{N}$%]/gu, "");
   // The arrow needs the headline's real line boxes (lines can wrap inside the column), measured once laid out.
   const column = useRef<HTMLDivElement>(null);
@@ -146,8 +157,8 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlight
     void document.fonts.ready.then(() => {
       const out: Line[] = [];
       for (const w of column.current?.querySelectorAll<HTMLElement>("[data-w]") ?? []) {
-        // Spans are positioned against the text column, which sits at left 56, top 120.
-        const box = { left: 56 + w.offsetLeft, right: 56 + w.offsetLeft + w.offsetWidth, top: 120 + w.offsetTop, bottom: 120 + w.offsetTop + w.offsetHeight };
+        // Spans are positioned against the text column, which sits at left 56, top textTop.
+        const box = { left: 56 + w.offsetLeft, right: 56 + w.offsetLeft + w.offsetWidth, top: textTop + w.offsetTop, bottom: textTop + w.offsetTop + w.offsetHeight };
         const line = out.find((l) => Math.abs(l.top - box.top) < 12);
         if (line) Object.assign(line, { left: Math.min(line.left, box.left), right: Math.max(line.right, box.right), hl: line.hl || w.dataset.hl === "1" });
         else out.push({ ...box, hl: w.dataset.hl === "1" });
@@ -167,7 +178,7 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlight
 
   return (
     <AbsoluteFill style={{ backgroundColor: theme.bg, fontFamily: theme.font, overflow: "hidden" }}>
-      {image ? (
+      {image && !card ? (
         <div style={{ ...imageBox, overflow: "hidden" }}>
           <Img
             src={image}
@@ -204,10 +215,29 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlight
           }}
         />
       )}
-      {layout === "right" && image ? (
+      {layout === "right" && image && !card ? (
         <AbsoluteFill
           style={{ background: `linear-gradient(90deg, ${theme.bg} 0%, ${theme.bg} 36%, ${theme.bg}cc 48%, transparent 70%)` }}
         />
+      ) : null}
+
+      {card ? (
+        <div
+          style={{
+            position: "absolute",
+            left: CARD.left,
+            top: CARD.top,
+            width: CARD.width,
+            height: CARD.height,
+            transform: "rotate(-2.5deg)",
+            borderRadius: 18,
+            overflow: "hidden",
+            border: "6px solid #fff",
+            boxShadow: `0 0 0 3px ${theme.accent}, 0 22px 50px #000d`,
+          }}
+        >
+          <Img src={image!} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "50% 30%" }} />
+        </div>
       ) : null}
 
       {presenter ? (
@@ -255,7 +285,7 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlight
         style={{
           position: "absolute",
           left: 56,
-          top: 120,
+          top: textTop,
           bottom: 50,
           width: textWidth,
           display: "flex",
