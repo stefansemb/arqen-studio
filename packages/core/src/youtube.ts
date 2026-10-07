@@ -171,10 +171,11 @@ export async function exchangeCode(code: string): Promise<{ id: string; title: s
   return stored.channel;
 }
 
-export async function getAccessToken(): Promise<string> {
+/** `force` gets a new token even when the stored one has not expired (after YouTube rejected it). */
+export async function getAccessToken(force = false): Promise<string> {
   const t = readToken();
   if (!t) throw new YouTubeError("YouTube is not connected. Connect it in the Publish tab.");
-  if (t.expires_at - Date.now() > 60_000) return t.access_token;
+  if (!force && t.expires_at - Date.now() > 60_000) return t.access_token;
   const c = requireConfig();
   const fresh = await tokenRequest({
     client_id: c.clientId,
@@ -184,6 +185,24 @@ export async function getAccessToken(): Promise<string> {
   });
   writeToken({ ...t, access_token: fresh.access_token, expires_at: Date.now() + fresh.expires_in * 1000 });
   return fresh.access_token;
+}
+
+/** Pause before retrying a rejected token; a just-issued one can take a moment to be accepted everywhere. */
+const RETRY_401_MS = 1500;
+
+/**
+ * Sends a request with `token`; on a 401 gets a fresh token, waits briefly and sends it once more. YouTube now
+ * and then rejects a valid token (seen 130 ms after a refresh, and once mid-upload on a token with 8 minutes left).
+ */
+async function sendWithAuth(
+  token: string,
+  send: (token: string) => Promise<Response>,
+  refresh: () => Promise<string> = () => getAccessToken(true),
+): Promise<Response> {
+  const res = await send(token);
+  if (res.status !== 401) return res;
+  await new Promise((r) => setTimeout(r, RETRY_401_MS));
+  return send(await refresh());
 }
 
 /**
@@ -296,21 +315,25 @@ export async function uploadVideo(opts: {
   accessToken: string;
   onProgress?: (fraction: number) => void;
   chunkSize?: number;
+  /** Fresh token after a 401; tests stub it. */
+  refreshToken?: () => Promise<string>;
 }): Promise<{ id: string }> {
   const size = fs.statSync(opts.file).size;
   const chunkSize = opts.chunkSize ?? CHUNK;
-  const init = await fetch(
-    `${apiBase()}/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status&notifySubscribers=${opts.notifySubscribers}`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${opts.accessToken}`,
-        "Content-Type": "application/json; charset=UTF-8",
-        "X-Upload-Content-Length": String(size),
-        "X-Upload-Content-Type": "video/mp4",
-      },
-      body: JSON.stringify(opts.resource),
-    },
+  const init = await sendWithAuth(
+    opts.accessToken,
+    (token) =>
+      fetch(`${apiBase()}/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status&notifySubscribers=${opts.notifySubscribers}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json; charset=UTF-8",
+          "X-Upload-Content-Length": String(size),
+          "X-Upload-Content-Type": "video/mp4",
+        },
+        body: JSON.stringify(opts.resource),
+      }),
+    opts.refreshToken,
   );
   if (!init.ok) throw await apiError(init, "Starting the upload");
   const session = init.headers.get("location");
@@ -372,22 +395,27 @@ async function queryOffset(session: string, size: number): Promise<number> {
 }
 
 export async function setThumbnail(videoId: string, file: string, accessToken: string): Promise<void> {
-  const res = await fetch(`${apiBase()}/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(videoId)}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "image/jpeg" },
-    body: fs.readFileSync(file),
-  });
+  const body = fs.readFileSync(file);
+  const res = await sendWithAuth(accessToken, (token) =>
+    fetch(`${apiBase()}/upload/youtube/v3/thumbnails/set?videoId=${encodeURIComponent(videoId)}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "image/jpeg" },
+      body,
+    }),
+  );
   if (!res.ok) throw await apiError(res, "Setting the thumbnail");
 }
 
 // ---------- Channel settings and playlists (need MANAGE_SCOPE) ----------
 
 async function api(method: string, pathAndQuery: string, body?: unknown): Promise<Response> {
-  return fetch(`${apiBase()}/youtube/v3/${pathAndQuery}`, {
-    method,
-    headers: { Authorization: `Bearer ${await getAccessToken()}`, ...(body ? { "Content-Type": "application/json" } : {}) },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  return sendWithAuth(await getAccessToken(), (token) =>
+    fetch(`${apiBase()}/youtube/v3/${pathAndQuery}`, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    }),
+  );
 }
 
 /**

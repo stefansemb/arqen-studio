@@ -41,6 +41,11 @@ describe("uploadVideo (resumable protocol against a mock server)", () => {
         const body = Buffer.concat(chunks);
         const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
         if (req.method === "POST" && req.url?.startsWith("/upload/youtube/v3/videos")) {
+          // YouTube now and then rejects a valid token; "stale-token" stands in for that.
+          if (req.headers.authorization === "Bearer stale-token") {
+            res.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ error: { code: 401, errors: [{ reason: "authError" }] } }));
+            return;
+          }
           initBody = JSON.parse(body.toString());
           initHeaders = req.headers;
           res.writeHead(200, { Location: `${base}/session` }).end();
@@ -97,5 +102,24 @@ describe("uploadVideo (resumable protocol against a mock server)", () => {
     expect(initHeaders["x-upload-content-length"]).toBe("3500");
     expect(initBody).toMatchObject({ snippet: { title: "My video" }, status: { privacyStatus: "unlisted" } });
     expect(progress[progress.length - 1]).toBe(1);
+  }, 20000);
+
+  it("gets a fresh token and retries once when the start of the upload is rejected with 401", async () => {
+    received = Buffer.alloc(0);
+    let refreshed = 0;
+    const result = await uploadVideo({
+      file,
+      resource: buildVideoResource(publish, opts),
+      notifySubscribers: false,
+      accessToken: "stale-token",
+      chunkSize: 4000,
+      refreshToken: async () => {
+        refreshed++;
+        return "fresh-token";
+      },
+    });
+    expect(result).toEqual({ id: "vid123" });
+    expect(refreshed).toBe(1);
+    expect(initHeaders.authorization).toBe("Bearer fresh-token");
   }, 20000);
 });
