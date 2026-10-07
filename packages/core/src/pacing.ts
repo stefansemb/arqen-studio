@@ -22,18 +22,20 @@ export function sceneLimit(start: number): number {
 
 /**
  * Splits B-roll scenes longer than their limit at the sentence start nearest their middle, until they fit or
- * no sentence starts far enough inside. The second half keeps the query; the assets step never shows one
- * image twice in a video, so it gets a new picture.
+ * no sentence starts far enough inside. Long single sentences fall back to a clause break (the word after a
+ * comma, semicolon, colon or dash). The second half keeps the query; the assets step never shows one image
+ * twice in a video, so it gets a new picture.
  */
-export function splitLongScenes(scenes: PlannedScene[], sentences: Sentence[]): { scenes: PlannedScene[]; splits: number } {
+export function splitLongScenes(scenes: PlannedScene[], sentences: Sentence[], words: Word[] = []): { scenes: PlannedScene[]; splits: number } {
   let splits = 0;
+  const clauses = words.filter((w, i) => i > 0 && /[,;:—–-]["')\]]?$/.test(words[i - 1].text)).map((w) => w.start);
+  const nearest = (times: number[], s: PlannedScene) => {
+    const mid = (s.start + s.end) / 2;
+    return times.filter((t) => t >= s.start + MIN_PART_SEC && t <= s.end - MIN_PART_SEC).sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid))[0];
+  };
   const split = (s: PlannedScene): PlannedScene[] => {
     if (s.type !== "broll" || s.end - s.start <= sceneLimit(s.start) + SLACK_SEC) return [s];
-    const mid = (s.start + s.end) / 2;
-    const cut = sentences
-      .map((x) => x.start)
-      .filter((t) => t >= s.start + MIN_PART_SEC && t <= s.end - MIN_PART_SEC)
-      .sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid))[0];
+    const cut = nearest(sentences.map((x) => x.start), s) ?? nearest(clauses, s);
     if (cut === undefined) return [s];
     splits++;
     const { asset: _a, credit: _c, source: _s, imageId: _i, ...rest } = s;

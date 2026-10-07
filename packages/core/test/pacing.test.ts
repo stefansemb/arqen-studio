@@ -25,6 +25,15 @@ describe("splitLongScenes", () => {
     expect(out.at(-1)).toMatchObject({ start: 20, end: 30, type: "title" });
   });
 
+  it("falls back to a clause break when one long sentence fills the scene", () => {
+    const scenes: PlannedScene[] = [{ start: 100, end: 124, type: "broll", text: "", query: "a" }];
+    const w: Word[] = ["When", "Nicholas", "left,", "Alexandra", "leaned", "on", "him,", "and", "it", "showed."].map((text, i) => ({ text, start: 100 + i * 2.4, end: 101 + i * 2.4 }));
+    const { scenes: out, splits } = splitLongScenes(scenes, sentences([100]), w);
+    expect(splits).toBe(1);
+    // "Alexandra" (107.2) and "and" (116.8) follow commas; 107.2 is nearer the middle (112).
+    expect(out.map((s) => [s.start, s.end])).toEqual([[100, 107.2], [107.2, 124]]);
+  });
+
   it("keeps a scene whole when no sentence starts far enough inside it", () => {
     const scenes: PlannedScene[] = [{ start: 100, end: 125, type: "broll", text: "", query: "a" }];
     expect(splitLongScenes(scenes, sentences([100, 101, 124])).splits).toBe(0);

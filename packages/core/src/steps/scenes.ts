@@ -186,7 +186,7 @@ ${sentences.map((s) => `[${s.index}] ${s.start.toFixed(1)}-${s.end.toFixed(1)}: 
       return { ...scene, clip: clip.id, clipStart, clipEnd, query: undefined };
     });
 
-  const { scenes: normalized, splits } = splitLongScenes(normalizeScenes(planned, timings.durationSec), sentences);
+  const { scenes: normalized, splits } = splitLongScenes(normalizeScenes(planned, timings.durationSec), sentences, timings.words);
   writeJson(ctx, "scenes.json", normalized);
   if (splits) ctx.log(`Split long B-roll ${splits} time(s) so the picture changes often enough`);
   writePacingReport(ctx);
