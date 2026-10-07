@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type { z } from "zod";
+import { decodeEscapes } from "./timing";
 
 let client: Anthropic | undefined;
 const getClient = () => (client ??= new Anthropic());
@@ -45,5 +46,6 @@ export async function generateStructured<T extends z.ZodType>(opts: {
   if (msg.stop_reason === "max_tokens") throw new Error("Claude response hit max_tokens; output truncated.");
 
   const text = msg.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
-  return opts.schema.parse(JSON.parse(text));
+  // Models sometimes double-escape a symbol (€ as "\\u20ac"), which would reach the screen as "€".
+  return opts.schema.parse(JSON.parse(text, (_key, value: unknown) => (typeof value === "string" ? decodeEscapes(value) : value)));
 }

@@ -5,7 +5,7 @@ import { getProject } from "./db";
 import { projectDir } from "./paths";
 import { getChannel, projectChannelId } from "./channels";
 import { TEMPLATES } from "./templates";
-import { fitClip } from "./timing";
+import { decodeEscapes, fitClip } from "./timing";
 import { MOTION_SCENE_TYPES } from "./providers/motion";
 import { readAppSettings, readSettings } from "./settings";
 import { cameraPath, simplifyPath, zoomOptions, type ActivitySample, type ZoomSettings } from "./zoom";
@@ -84,8 +84,8 @@ export function buildVideoProps(projectId: string, baseUrl: string): NewsVideoPr
         start: s.start,
         end: s.end,
         type: s.type,
-        text: s.text,
-        sub: s.sub,
+        text: decodeEscapes(s.text),
+        sub: s.sub && decodeEscapes(s.sub),
         image: s.asset ? url(s.asset) : undefined,
         // Only while the scene is still a graphics type; a scene edited into e.g. a title drops it.
         motion: s.motionClip && MOTION_SCENE_TYPES.has(s.type) ? url(s.motionClip) : undefined,

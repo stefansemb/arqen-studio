@@ -52,6 +52,14 @@ export function wordsToSentences(words: Word[]): Sentence[] {
   return sentences;
 }
 
+/**
+ * Turns escape sequences a model wrote as literal text ("€3B") into the characters they stand for ("€3B").
+ * A real backslash-u never belongs in narration or on-screen text.
+ */
+export function decodeEscapes(s: string): string {
+  return s.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)));
+}
+
 /** Full narration text in reading order. */
 export function scriptToText(s: Script): string {
   return [s.hook, ...s.segments.map((seg) => seg.text), s.cta].filter((t) => t.trim()).join("\n\n");
