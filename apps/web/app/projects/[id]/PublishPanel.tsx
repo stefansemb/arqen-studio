@@ -254,6 +254,29 @@ export function PublishPanel(props: {
                   setTextsDirty(true);
                 }}
               />
+              <input
+                className="input"
+                style={{ flex: "none", width: 140, minWidth: 0 }}
+                placeholder="Bubble"
+                title="Thought bubble by your head (needs the presenter)"
+                value={t.bubble?.text ?? ""}
+                maxLength={24}
+                onChange={(e) => {
+                  setTexts(texts.map((x, j) => (j === i ? { ...x, bubble: { ...x.bubble, text: e.target.value } } : x)));
+                  setTextsDirty(true);
+                }}
+              />
+              <label className="row muted" style={{ gap: 4, fontSize: 12, flex: "none" }} title="Cross the bubble out with a red X">
+                <input
+                  type="checkbox"
+                  checked={Boolean(t.bubble?.cross)}
+                  onChange={(e) => {
+                    setTexts(texts.map((x, j) => (j === i ? { ...x, bubble: { text: x.bubble?.text ?? "", cross: e.target.checked } } : x)));
+                    setTextsDirty(true);
+                  }}
+                />
+                {"❌"}
+              </label>
             </div>
           ))}
           <div className="row" style={{ justifyContent: "space-between" }}>

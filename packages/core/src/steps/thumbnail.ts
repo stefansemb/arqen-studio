@@ -100,6 +100,7 @@ export async function renderThumbnails(ctx: StepContext): Promise<void> {
         badge,
         layout,
         theme: getChannel().theme,
+        ...(presenter && text.bubble ? { bubble: text.bubble } : {}),
       };
       props.push(inputProps);
       variants.push({ ...text, ...(gesture ? { gesture } : {}), file: `thumbs/thumb-${i}.jpg`, background, presenter, layout });
@@ -110,13 +111,24 @@ export async function renderThumbnails(ctx: StepContext): Promise<void> {
       await renderStill({ composition, serveUrl, inputProps, output, imageFormat: "jpeg", jpegQuality: 92 });
     };
 
+    // The bubble sits by his head, placed from the cut-out's edge.
+    for (const [i, v] of variants.entries()) {
+      if (!v.presenter || !props[i].bubble) continue;
+      try {
+        props[i] = { ...props[i], presenterEdge: await presenterEdges(path.join(ctx.dir, v.presenter)) };
+      } catch (err) {
+        ctx.log(`Bubble placed without the cut-out edge: ${(err as Error).message}`, "warn");
+      }
+    }
+
     // Arrows sit between headline and person, never on him: with the presenter they point from his edge to the
     // highlighted word (his edge comes from the cut-out, no AI); without him from the headline to the subject,
     // which Claude Haiku finds on gridded drafts. The component leaves an arrow out where the gap is too narrow.
     if (readAppSettings().thumbnailArrow) {
       try {
         for (const [i, v] of variants.entries()) {
-          if (!v.presenter) continue;
+          // A bubble is already the prop; an arrow as well would clutter the picture.
+          if (!v.presenter || props[i].bubble) continue;
           props[i] = { ...props[i], arrow: { to: "text" }, presenterEdge: await presenterEdges(path.join(ctx.dir, v.presenter)) };
           variants[i] = { ...v, arrow: { to: "text" } };
         }

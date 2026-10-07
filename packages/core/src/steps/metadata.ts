@@ -11,7 +11,7 @@ import { getTemplate } from "../templates";
 import { readAppSettings } from "../settings";
 import type { Article, PlannedScene, Script, Timings } from "../types";
 import { readPublish } from "../publishStore";
-import { listGestures } from "../presenter";
+import { freshLead, listGestures, recentGestures } from "../presenter";
 
 const MetadataSchema = z.object({
   titles: z.array(z.string()).describe("5 title options, best first"),
@@ -25,9 +25,11 @@ const MetadataSchema = z.object({
         text: z.string(),
         highlight: z.string().describe("One word from text to color"),
         gesture: z.string().describe("Presenter gesture from the list in the instructions, or empty if there is none"),
+        bubble: z.string().describe("Presenter thought bubble, 1-3 words, or empty; see the instructions"),
+        bubbleCross: z.boolean().describe("Cross the bubble out with a red X"),
       }),
     )
-    .describe("3 thumbnail text options, 2 words each (3 at most), each starting with the video's subject"),
+    .describe("3 thumbnail text options following the thumbnail text rules"),
   commentQuestion: z
     .string()
     .describe("Opening of the channel's pinned comment: 1-2 short sentences ending in a specific question viewers want to answer; no links, no hashtags"),
@@ -37,9 +39,11 @@ const STOCK_SITES = [SOURCE_NAMES.pexels, SOURCE_NAMES.pixabay];
 
 /** Pinned comment and thumbnail guidance for templates without their own (the AI news ones). */
 const DEFAULT_PACKAGING = `Pinned comment: a concrete opinion question about this story (e.g. "Would you trust Gemini 4 with your codebase?"), not "What do you think?".
-Thumbnail text: 2 punchy words (3 at most, it is set huge on 2 lines) that ADD to the title rather than repeat it; highlight the single most important word.
-Start every thumbnail text with the recognizable subject people search for (product, model, company or person, e.g. "Gemini Locked",
-"OpenAI Pauses"; for a roundup, the biggest story's subject), so a viewer scrolling past knows the topic at a glance. Only state what the video supports.`;
+Thumbnail text: 2-4 words (it is set huge on 2 lines) that ADD to the title rather than repeat it; highlight the single most important word.
+Show the most concrete moment of the story, not a summary of it: a short quote, a number or what happened, so a viewer
+stops and asks "wait, what?". Good: 'It Said "I Love You"', "Deleted 2M Files", "Gemini Locked". Weak: abstract labels like
+"Dots Confused" or "AI Drama". Name the subject (product, model, company or person) when the moment alone doesn't tell
+which story it is; the title carries it otherwise. Only state what the video supports.`;
 
 function readRoundupSources(dir: string): { title: string; url: string }[] {
   const p = path.join(dir, "articles.json");
@@ -55,6 +59,7 @@ export async function generateMetadata(ctx: StepContext): Promise<void> {
   const scenesFile = path.join(ctx.dir, "scenes.json");
   const scenes = fs.existsSync(scenesFile) ? (JSON.parse(fs.readFileSync(scenesFile, "utf8")) as PlannedScene[]) : [];
   const gestures = listGestures();
+  const recent = gestures.length ? recentGestures(ctx.dir) : [];
   ctx.log("Writing title options, description, tags and thumbnail text");
 
   const m = await generateStructured({
@@ -69,7 +74,12 @@ ${template.packaging ?? DEFAULT_PACKAGING}${
       gestures.length
         ? `\nThumbnail gesture: the presenter stands on the right, next to the text. The FIRST option is the one used, and its gesture should be thinking unless another gesture clearly fits better: thinking suits most news, analysis, AI safety and legal twists.
 Use pointing or presenting-left to show off a new product or feature. Use surprised only for truly shocking, once-in-a-while news, never as a default and never on the first option for ordinary news.
-Use a different gesture for each option. Available: ${gestures.join(", ")}.`
+Use a different gesture for each option. Available: ${gestures.join(", ")}.
+Thought bubble: when the story has a twist the presenter can react to, put 1-3 words in a bubble by his head that complete the joke
+or the contradiction, not repeat the text (e.g. text 'It Said "I Love You"', bubble "Mike?" crossed out; text "GPT-6 Delayed", bubble "Again?").
+Set bubbleCross for something wrong, denied or fake. Leave the bubble empty when nothing fits; a forced bubble is worse than none.${
+            recent.length ? `\nThe latest videos already used ${[...new Set(recent)].join(" and ")} on their thumbnail; the first option must use a different gesture so the channel grid doesn't repeat the same face.` : ""
+          }`
         : ""
     }`,
     prompt: `Create the YouTube packaging for this video.
@@ -91,6 +101,12 @@ ${script.hook ? `Hook: ${script.hook}\n` : ""}${script.cta ? `CTA: ${script.cta}
   const hashtags = m.hashtags.slice(0, 3).map((h) => h.replace(/^#/, "").replace(/\s+/g, ""));
   const titles = m.titles.map((t) => stripDashes(t, ": ")).filter(Boolean).slice(0, 5);
   const previous = readPublish(ctx.dir);
+  // The model leans on thinking; never let the used thumbnail repeat the last videos' face.
+  const leadGestures = freshLead(
+    m.thumbnailTexts.slice(0, 3).map((t) => (gestures.includes(t.gesture.trim()) ? t.gesture.trim() : undefined)),
+    recent,
+    gestures,
+  );
   // Image sources in order of first use (older scenes.json files have no source field).
   const usedSources = [...new Set(scenes.map((sc) => sc.source).filter((n): n is string => Boolean(n)))];
   const info: PublishInfo = {
@@ -111,10 +127,13 @@ ${script.hook ? `Hook: ${script.hook}\n` : ""}${script.cta ? `CTA: ${script.cta}
     tags: fitTags(m.tags),
     hashtags,
     chapters,
-    thumbnailTexts: m.thumbnailTexts.slice(0, 3).map((t) => ({
+    thumbnailTexts: m.thumbnailTexts.slice(0, 3).map((t, i) => ({
       text: stripDashes(t.text, " "),
       highlight: t.highlight.trim(),
-      ...(gestures.includes(t.gesture.trim()) ? { gesture: t.gesture.trim() } : {}),
+      ...(leadGestures[i] ? { gesture: leadGestures[i] } : {}),
+      ...(gestures.length && t.bubble.trim()
+        ? { bubble: { text: stripDashes(t.bubble, " ").slice(0, 24), ...(t.bubbleCross ? { cross: true } : {}) } }
+        : {}),
     })),
     comment: stripDashes(m.commentQuestion),
     // Keep existing thumbnails until the thumbnail step replaces them.

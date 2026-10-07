@@ -28,6 +28,8 @@ export interface ThumbnailProps {
   arrow?: { to: "text" } | { to: "subject"; x: number; y: number };
   /** The presenter's left edge (px) for every 10 px row of the thumbnail; 1280 where he isn't. */
   presenterEdge?: number[];
+  /** Thought bubble by the presenter's head (needs presenter; placed with presenterEdge when given). */
+  bubble?: { text: string; cross?: boolean };
   /** Draws the labelled cell grid (THUMB_GRID) used when asking which cell holds the thing to point at. */
   grid?: boolean;
 }
@@ -46,7 +48,12 @@ function lines(text: string): string[] {
   if (words.length < 2) return words;
   let best = [words.join(" ")];
   let bestLen = best[0].length;
-  for (let i = 1; i < words.length; i++) {
+  // Never break inside a quote ('IT SAID / "I LOVE YOU"'), unless the quote is all there is.
+  const quotes = (w: string) => (w.match(/["“”]/g) ?? []).length;
+  const inQuote = (i: number) => words.slice(0, i).reduce((n, w) => n + quotes(w), 0) % 2 === 1;
+  const splits = [...Array(words.length).keys()].slice(1);
+  const allowed = splits.some((i) => !inQuote(i)) ? splits.filter((i) => !inQuote(i)) : splits;
+  for (const i of allowed) {
     const pair = [words.slice(0, i).join(" "), words.slice(i).join(" ")];
     const len = Math.max(pair[0].length, pair[1].length);
     if (len < bestLen) [best, bestLen] = [pair, len];
@@ -105,7 +112,23 @@ function placeArrow(arrow: NonNullable<ThumbnailProps["arrow"]>, lines: Line[], 
   return target.x - x0 >= MIN_ARROW_GAP ? arrowBetween(x0, mid(line), target.x, target.y) : null;
 }
 
-export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlightBox, image, presenter, channel, badge, layout, theme: overrides, arrow, presenterEdge, grid }) => {
+/** Where the thought bubble goes: left of the head, its tail dots running to the head. */
+function placeBubble(text: string, cross: boolean, presenterEdge?: number[]) {
+  const fontSize = 58;
+  const width = Math.min(440, Math.round(text.length * fontSize * 0.62) + 90 + (cross ? 70 : 0));
+  const height = 130;
+  const band = (y: number) => presenterEdge?.[Math.max(0, Math.min(presenterEdge.length - 1, Math.floor(y / 10)))] ?? THUMB_WIDTH;
+  const headTop = presenterEdge ? Math.max(0, presenterEdge.findIndex((e) => e < THUMB_WIDTH)) * 10 : 30;
+  const top = Math.max(110, headTop);
+  // His left edge beside the bubble; without the edge, a spot that suits the stock cut-outs.
+  let edge = THUMB_WIDTH;
+  for (let y = top; y <= top + height; y += 10) edge = Math.min(edge, band(y));
+  if (edge >= THUMB_WIDTH) edge = 820;
+  const right = edge - 50;
+  return { fontSize, width, height, left: right - width, top, head: { x: edge + 10, y: headTop + 110 } };
+}
+
+export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlightBox, image, presenter, channel, badge, layout, theme: overrides, arrow, presenterEdge, grid, bubble }) => {
   const theme = resolveTheme(overrides);
   const rows = lines(text);
   const longest = Math.max(...rows.map((r) => r.length), 1);
@@ -299,6 +322,8 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlight
         </svg>
       ) : null}
 
+      {presenter && bubble?.text ? <ThoughtBubble {...bubble} edge={presenterEdge} /> : null}
+
       {grid ? (
         <svg width={THUMB_WIDTH} height={THUMB_HEIGHT} style={{ position: "absolute", inset: 0 }}>
           {Array.from({ length: THUMB_GRID.cols * THUMB_GRID.rows }, (_, i) => {
@@ -317,5 +342,48 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlight
         </svg>
       ) : null}
     </AbsoluteFill>
+  );
+};
+
+/** A white cloud with dots trailing to the head, text in black, optionally crossed out with a red X. */
+const ThoughtBubble: React.FC<{ text: string; cross?: boolean; edge?: number[] }> = ({ text, cross, edge }) => {
+  const b = placeBubble(text.toUpperCase(), Boolean(cross), edge);
+  const tailFrom = { x: b.left + b.width * 0.82, y: b.top + b.height };
+  const dots = [0.35, 0.65].map((f, i) => ({
+    x: tailFrom.x + (b.head.x - tailFrom.x) * f,
+    y: tailFrom.y + (b.head.y - tailFrom.y) * f + 14,
+    r: 16 - i * 5,
+  }));
+  return (
+    <>
+      <svg width={THUMB_WIDTH} height={THUMB_HEIGHT} style={{ position: "absolute", inset: 0, filter: "drop-shadow(0 8px 18px #000a)" }}>
+        {dots.map((d, i) => (
+          <circle key={i} cx={d.x} cy={d.y} r={d.r} fill="#fff" stroke="#000" strokeWidth={4} />
+        ))}
+      </svg>
+      <div
+        style={{
+          position: "absolute",
+          left: b.left,
+          top: b.top,
+          width: b.width,
+          height: b.height,
+          background: "#fff",
+          border: "5px solid #000",
+          borderRadius: "50% / 50%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          boxShadow: "0 8px 24px #000a",
+        }}
+      >
+        {cross ? (
+          <svg width={56} height={56} viewBox="0 0 100 100" style={{ marginRight: 14, flex: "none" }}>
+            <path d="M16 16 L84 84 M84 16 L16 84" stroke="#ff2d3d" strokeWidth={22} strokeLinecap="round" />
+          </svg>
+        ) : null}
+        <span style={{ color: "#0b0b12", fontWeight: 900, fontSize: b.fontSize, letterSpacing: -1, whiteSpace: "nowrap" }}>{text.toUpperCase()}</span>
+      </div>
+    </>
   );
 };

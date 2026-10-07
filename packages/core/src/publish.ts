@@ -49,6 +49,8 @@ export interface ThumbnailText {
   highlight?: string;
   /** Presenter gesture (see presenter.ts), picked by Claude to match the text. */
   gesture?: string;
+  /** Thought bubble by the presenter's head: 1-3 words, optionally crossed out in red ("NOT MIKE"). */
+  bubble?: { text: string; cross?: boolean };
 }
 
 export interface ThumbnailVariant extends ThumbnailText {
