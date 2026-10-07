@@ -281,7 +281,7 @@ export function PublishPanel(props: {
           ))}
           <div className="row" style={{ justifyContent: "space-between" }}>
             <span className="muted" style={{ fontSize: 12 }}>
-              2-5 words read best on a phone. Re-rendering is free (no AI).
+              2-5 words read best on a phone. Re-rendering is free (the background pick runs once per video, under 1 cent).
             </span>
             <button
               className="btn ghost"

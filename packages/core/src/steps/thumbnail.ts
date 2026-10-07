@@ -10,14 +10,17 @@ import { extractFrame } from "../providers/ffmpeg";
 import type { ThumbnailVariant } from "../publish";
 import { getTemplate } from "../templates";
 import { readAppSettings } from "../settings";
-import type { ClipInfo, PlannedScene } from "../types";
+import type { Article, ClipInfo, PlannedScene } from "../types";
 import { readPublish } from "../publishStore";
 import { getBundle, serveDir } from "./render";
 import { listGestures, pickGesture, presenterFile } from "../presenter";
 import { SOURCE_NAMES, STOCK_SOURCES } from "../providers/images";
 import { pickSubjectTargets, presenterEdges } from "../providers/thumbArrow";
+import { bestBackgrounds, SCORING_VERSION, scoreBackgrounds } from "../providers/thumbPick";
 
 const VARIANTS = 3;
+/** Images Claude Haiku compares for the thumbnail background (article images first, then B-roll). */
+const CANDIDATES = 8;
 
 /**
  * Picks up to three background images: moments from the user's recordings for tutorials,
@@ -53,9 +56,34 @@ async function pickBackgrounds(ctx: StepContext): Promise<string[]> {
   // and the A/B test compares the wording.
   const opening = archiveFirst && out.length === 0 ? scenes.find((s) => s.asset && !isStock(s)) : undefined;
   if (opening?.asset) return [opening.asset];
-  for (const s of imageScenes) {
+  const candidates = [...new Set(imageScenes.map((s) => s.asset).filter((a): a is string => Boolean(a)))].slice(0, CANDIDATES);
+  const needed = VARIANTS - out.length;
+  if (candidates.length > 1 && needed > 0) {
+    try {
+      // Saved per project, so "Re-render thumbnails" stays free after the first pick.
+      const cacheFile = path.join(ctx.dir, "thumbs", "background-scores.json");
+      const cached = fs.existsSync(cacheFile)
+        ? (JSON.parse(fs.readFileSync(cacheFile, "utf8")) as { version?: number; candidates: string[]; scored: { score: number; subject: string }[] })
+        : null;
+      const fresh = cached?.version === SCORING_VERSION && cached.candidates.join("|") === candidates.join("|");
+      let scored = fresh ? cached.scored : null;
+      if (!scored) {
+        const article = readJson<Article>(ctx, "article.json");
+        scored = await scoreBackgrounds(candidates.map((c) => path.join(ctx.dir, c)), article.title);
+        fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
+        fs.writeFileSync(cacheFile, JSON.stringify({ version: SCORING_VERSION, candidates, scored }, null, 2));
+      }
+      const stock = candidates.map((c) => scenes.some((s) => s.asset === c && s.type !== "article" && isStock(s)));
+      const best = bestBackgrounds(candidates, scored.map((r) => r.score), needed, stock);
+      ctx.log(`Background pick: ${best.map((b) => `${path.basename(b)} (${scored[candidates.indexOf(b)].score}/10, ${scored[candidates.indexOf(b)].subject || "no subject"})`).join("; ")}`);
+      return [...out, ...best];
+    } catch (err) {
+      ctx.log(`Background pick skipped, using scene order: ${(err as Error).message}`, "warn");
+    }
+  }
+  for (const c of candidates) {
     if (out.length >= VARIANTS) break;
-    if (s.asset && !out.includes(s.asset)) out.push(s.asset);
+    if (!out.includes(c)) out.push(c);
   }
   return out;
 }
