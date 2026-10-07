@@ -21,7 +21,7 @@ describe("pickGesture", () => {
   });
 
   it("falls back to a different gesture per variant", () => {
-    expect([0, 1, 2].map((i) => pickGesture("dancing", i, available))).toEqual(["thinking", "pointing", "comparing"]);
+    expect([0, 1, 2].map((i) => pickGesture("dancing", i, available))).toEqual(["thinking", "comparing", "pointing"]);
     expect(pickGesture(undefined, 3, available)).toBe("surprised");
   });
 
@@ -42,7 +42,7 @@ describe("freshLead", () => {
   });
 
   it("takes an unused gesture when no option is fresh", () => {
-    expect(freshLead(["thinking", "surprised", "pointing"], ["thinking", "pointing"], available)).toEqual(["two-hands", "surprised", "pointing"]);
+    expect(freshLead(["thinking", "surprised", "pointing"], ["thinking", "pointing"], available)).toEqual(["comparing", "surprised", "pointing"]);
   });
 });
 

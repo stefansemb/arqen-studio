@@ -14,9 +14,23 @@ const FACING_AWAY = new Set(["presenting-right"]);
 
 /**
  * Fallback order when Claude's pick is missing. Thinking comes first (it scored 83 against 47 for
- * surprised in vidIQ), and surprised sits last because it is meant for truly shocking news only.
+ * surprised in vidIQ), then the "-serious" variants (same gesture, closed-mouth neutral face), which
+ * suit most news better than the big smiles. Surprised sits last: truly shocking news only.
  */
-const FALLBACK = ["thinking", "pointing", "presenting-left", "holding-up", "two-hands", "comparing", "thumbs-up", "surprised"];
+const FALLBACK = [
+  "thinking",
+  "pointing-serious",
+  "presenting-left-serious",
+  "holding-up-serious",
+  "two-hands-serious",
+  "comparing",
+  "pointing",
+  "presenting-left",
+  "holding-up",
+  "two-hands",
+  "thumbs-up",
+  "surprised",
+];
 
 /** Gesture names available for thumbnails (file names without .png); none when the channel has the presenter off. */
 export function listGestures(dir?: string): string[] {

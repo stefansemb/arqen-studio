@@ -73,7 +73,9 @@ Never use em dashes or en dashes anywhere (titles, description, chapters, thumbn
 ${template.packaging ?? DEFAULT_PACKAGING}${
       gestures.length
         ? `\nThumbnail gesture: the presenter stands on the right, next to the text. The FIRST option is the one used, and its gesture should be thinking unless another gesture clearly fits better: thinking suits most news, analysis, AI safety and legal twists.
-Use pointing or presenting-left to show off a new product or feature. Use surprised only for truly shocking, once-in-a-while news, never as a default and never on the first option for ordinary news.
+Gestures ending in "-serious" have a calm, closed-mouth face; the same gesture without it has a big smile. Prefer the
+serious ones for ordinary news, and keep the smiling ones for clearly good, fun or exciting news.
+Use pointing(-serious) or presenting-left(-serious) to show off a new product or feature. Use surprised only for truly shocking, once-in-a-while news, never as a default and never on the first option for ordinary news.
 Use a different gesture for each option. Available: ${gestures.join(", ")}.
 Thought bubble: when the story has a twist the presenter can react to, put 1-3 words in a bubble by his head that complete the joke
 or the contradiction, not repeat the text (e.g. text 'It Said "I Love You"', bubble "Mike?" crossed out; text "GPT-6 Delayed", bubble "Again?").
