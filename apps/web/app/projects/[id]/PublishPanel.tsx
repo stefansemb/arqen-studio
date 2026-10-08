@@ -238,11 +238,15 @@ export function PublishPanel(props: {
                 className="input"
                 value={t.text}
                 maxLength={60}
+                placeholder={t.brand?.company ? "Product name" : undefined}
+                title={t.brand?.company ? "Brand card: the big white name at the bottom" : "Headline"}
                 onChange={(e) => {
                   setTexts(texts.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)));
                   setTextsDirty(true);
                 }}
               />
+              {t.brand?.company ? null : (
+              <>
               <input
                 className="input"
                 style={{ flex: "none", width: 160, minWidth: 0 }}
@@ -266,6 +270,36 @@ export function PublishPanel(props: {
                   setTextsDirty(true);
                 }}
               />
+              </>
+              )}
+              <input
+                className="input"
+                style={{ flex: "none", width: 120, minWidth: 0 }}
+                placeholder="Brand"
+                title="Brand card: the company at the top (Anthropic, OpenAI...) with its logo and colors. Empty for the normal layout."
+                value={t.brand?.company ?? ""}
+                maxLength={30}
+                onChange={(e) => {
+                  setTexts(texts.map((x, j) => (j === i ? { ...x, brand: { company: e.target.value, kicker: x.brand?.kicker ?? "Introducing" } } : x)));
+                  setTextsDirty(true);
+                }}
+              />
+              {t.brand?.company ? (
+                <input
+                  className="input"
+                  style={{ flex: "none", width: 140, minWidth: 0 }}
+                  placeholder="Kicker"
+                  title="Brand card: the colored line in the middle (Introducing, First preview of, Leaked:)"
+                  value={t.brand.kicker}
+                  maxLength={24}
+                  onChange={(e) => {
+                    setTexts(texts.map((x, j) => (j === i ? { ...x, brand: { company: x.brand?.company ?? "", kicker: e.target.value } } : x)));
+                    setTextsDirty(true);
+                  }}
+                />
+              ) : null}
+              {t.brand?.company ? null : (
+              <>
               <label className="row muted" style={{ gap: 4, fontSize: 12, flex: "none" }} title="Launch layout: the name huge across the top, big picture card">
                 <input
                   type="checkbox"
@@ -288,6 +322,8 @@ export function PublishPanel(props: {
                 />
                 {"❌"}
               </label>
+              </>
+              )}
             </div>
           ))}
           <div className="row" style={{ justifyContent: "space-between" }}>

@@ -53,6 +53,8 @@ export interface ThumbnailText {
   bubble?: { text: string; cross?: boolean };
   /** Launch layout: the product name huge across the top and a big picture card (needs the presenter). */
   launch?: boolean;
+  /** Brand card: the company's logo and colors, the kicker above and the text as the product name. No picture or presenter. */
+  brand?: { company: string; kicker: string };
 }
 
 export interface ThumbnailVariant extends ThumbnailText {

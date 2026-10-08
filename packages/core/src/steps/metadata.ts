@@ -28,6 +28,8 @@ const MetadataSchema = z.object({
         bubble: z.string().describe("Presenter thought bubble, 1-3 words, or empty; see the instructions"),
         bubbleCross: z.boolean().describe("Cross the bubble out with a red X"),
         launch: z.boolean().describe("Launch layout: true only when text is just the new product's name and version"),
+        company: z.string().describe("Brand card: the company behind the new model or product, or empty; see the instructions"),
+        kicker: z.string().describe("Brand card line above the name, e.g. Introducing; empty without company"),
       }),
     )
     .describe("3 thumbnail text options following the thumbnail text rules"),
@@ -71,7 +73,12 @@ Titles: under ${YT.titleIdeal} characters, specific and curiosity-driven, front-
 anything the video does not deliver, no ALL CAPS titles, at most one emoji. Vary the angle across options (outcome, question, number, contrarian, how-to).
 Description summary: first sentence works as a search snippet; plain language; no "In this video".
 Never use em dashes or en dashes anywhere (titles, description, chapters, thumbnail text, comment): use a colon, a comma or a new sentence instead.
-${template.packaging ?? DEFAULT_PACKAGING}${
+${template.packaging ?? DEFAULT_PACKAGING}
+Brand card: when the story is the release, preview or leak of a new AI model or product, make the FIRST option a brand card:
+company is the maker ("Anthropic", "OpenAI", "Google DeepMind", "Meta", "xAI", "Mistral", "DeepSeek"), text is only the product
+name with its version ("Haiku 5.5", "GPT-7 'Bel'", "Gemini 4 Argon"), under 15 characters, and kicker says what happened:
+"Introducing" for a release, "First preview of" for a preview or early access, "Leaked:" for a leak. It shows the company's logo
+and colors with no picture or presenter. Leave company and kicker empty on every other option and for other stories.${
       gestures.length
         ? `\nThumbnail gesture: the presenter stands on the right, next to the text. The FIRST option is the one used, and its gesture should be thinking unless another gesture clearly fits better: thinking suits most news, analysis, AI safety and legal twists.
 Gestures ending in "-serious" have a calm, closed-mouth face; the same gesture without it has a big smile. Prefer the
@@ -81,7 +88,7 @@ Use a different gesture for each option. Available: ${gestures.join(", ")}.
 Thought bubble: when the story has a twist the presenter can react to, put 1-3 words in a bubble by his head that complete the joke
 or the contradiction, not repeat the text (e.g. text 'It Said "I Love You"', bubble "Mike?" crossed out; text "GPT-6 Delayed", bubble "Again?").
 Set bubbleCross for something wrong, denied or fake. Leave the bubble empty when nothing fits; a forced bubble is worse than none.
-Launch layout: when the story is the release of a new model or product, make the FIRST option a launch thumbnail: launch true, text
+Launch layout: when the story is the release of a new model or product, make the SECOND option a launch thumbnail: launch true, text
 is only the name with its version ("Haiku 5.5", "GPT-6 Luna", "Gemini 4 Pro"), highlight the version number ("5.5"), no bubble.
 It is set on one huge line across the top, so keep it under 12 characters. Never use launch for other stories.${
             recent.length ? `\nThe latest videos already used ${[...new Set(recent)].join(" and ")} on their thumbnail; the first option must use a different gesture so the channel grid doesn't repeat the same face.` : ""
@@ -136,6 +143,7 @@ ${script.hook ? `Hook: ${script.hook}\n` : ""}${script.cta ? `CTA: ${script.cta}
     thumbnailTexts: m.thumbnailTexts.slice(0, 3).map((t, i) => ({
       text: stripDashes(t.text, " "),
       highlight: t.highlight.trim(),
+      ...(t.company.trim() ? { brand: { company: t.company.trim().slice(0, 30), kicker: stripDashes(t.kicker, " ").trim().slice(0, 24) } } : {}),
       ...(leadGestures[i] ? { gesture: leadGestures[i] } : {}),
       ...(gestures.length && t.launch ? { launch: true } : {}),
       ...(gestures.length && t.bubble.trim() && !t.launch

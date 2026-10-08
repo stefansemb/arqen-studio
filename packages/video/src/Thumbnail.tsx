@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { AbsoluteFill, continueRender, delayRender, Img } from "remotion";
 import { resolveTheme, type ThemeOverrides } from "./theme";
+import { BrandThumbnail } from "./BrandThumbnail";
 
 export interface ThumbnailProps {
   [key: string]: unknown;
@@ -40,6 +41,11 @@ export interface ThumbnailProps {
    * picture as a big card below it, the presenter smaller at the bottom right. No arrow or bubble.
    */
   launch?: boolean;
+  /**
+   * Brand launch card: the company's logo and colors, the kicker ("Introducing") and `text` as the product name,
+   * over a particle wave. Uses no picture or presenter.
+   */
+  brand?: { company: string; kicker: string };
   /** Draws the labelled cell grid (THUMB_GRID) used when asking which cell holds the thing to point at. */
   grid?: boolean;
 }
@@ -148,7 +154,15 @@ function placeBubble(text: string, cross: boolean, presenterEdge?: number[]) {
   return { fontSize, width, height, left: right - width, top, head: { x: edge + 10, y: headTop + 110 } };
 }
 
-export const Thumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlightBox, image, presenter, channel, badge, layout, theme: overrides, arrow, presenterEdge, grid, bubble, imageCard, launch: launchProp }) => {
+export const Thumbnail: React.FC<ThumbnailProps> = (props) =>
+  props.brand?.company ? (
+    <BrandThumbnail company={props.brand.company} kicker={props.brand.kicker} text={props.text} theme={resolveTheme(props.theme)} />
+  ) : (
+    <PhotoThumbnail {...props} />
+  );
+
+/** The headline over a tinted photo, with the presenter, arrow and bubble. */
+const PhotoThumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlightBox, image, presenter, channel, badge, layout, theme: overrides, arrow, presenterEdge, grid, bubble, imageCard, launch: launchProp }) => {
   const theme = resolveTheme(overrides);
   const launch = Boolean(launchProp && presenter);
   const rows = launch ? [text.toUpperCase().trim()] : lines(text);

@@ -6,3 +6,4 @@ export { ChannelAvatar, ChannelBanner, BANNER, type AvatarProps, type BannerProp
 export { ShortVideo, SHORT_WIDTH, SHORT_HEIGHT, type ShortVideoProps } from "./ShortVideo";
 export { defaultTheme, type Theme, type ThemeOverrides } from "./theme";
 export { DocAvatar, DocBanner, type DocAvatarProps, type DocBannerProps } from "./DocumentaryArt";
+export { findBrand, type Brand } from "./brands";

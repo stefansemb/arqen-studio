@@ -108,11 +108,13 @@ export async function renderThumbnails(ctx: StepContext): Promise<void> {
     const props: ThumbnailProps[] = [];
     for (let i = 0; i < VARIANTS; i++) {
       const text = publish.thumbnailTexts[i % publish.thumbnailTexts.length];
-      const background = backgrounds.length ? backgrounds[i % backgrounds.length] : undefined;
+      // The brand card is all logo, colors and name: no photo or presenter.
+      const brand = text.brand?.company ? text.brand : undefined;
+      const background = backgrounds.length && !brand ? backgrounds[i % backgrounds.length] : undefined;
       // One layout for every variant so the channel's thumbnails read as a series.
       const layout: ThumbnailVariant["layout"] = "right";
       // Copied into the project so the render server (which serves only the project dir) can reach it.
-      const gesture = pickGesture(text.gesture, i, gestures);
+      const gesture = brand ? undefined : pickGesture(text.gesture, i, gestures);
       let presenter: string | undefined;
       if (gesture) {
         presenter = `thumbs/presenter-${i}.png`;
@@ -132,9 +134,10 @@ export async function renderThumbnails(ctx: StepContext): Promise<void> {
         ...(presenter && text.launch ? { launch: true } : {}),
         // Beside the presenter a tinted backdrop is mostly hidden; a card in real colors shows what the story is.
         ...(presenter && background ? { imageCard: true } : {}),
+        ...(brand ? { brand } : {}),
       };
       props.push(inputProps);
-      variants.push({ ...text, ...(gesture ? { gesture } : {}), file: `thumbs/thumb-${i}.jpg`, background, presenter, layout });
+      variants.push({ ...text, gesture, file: `thumbs/thumb-${i}.jpg`, background, presenter, layout });
     }
 
     const still = async (inputProps: ThumbnailProps, output: string) => {
@@ -163,7 +166,7 @@ export async function renderThumbnails(ctx: StepContext): Promise<void> {
           props[i] = { ...props[i], arrow: { to: "text" }, presenterEdge: await presenterEdges(path.join(ctx.dir, v.presenter)) };
           variants[i] = { ...v, arrow: { to: "text" } };
         }
-        const bare = variants.map((v, i) => (v.presenter ? -1 : i)).filter((i) => i >= 0);
+        const bare = variants.map((v, i) => (v.presenter || props[i].brand ? -1 : i)).filter((i) => i >= 0);
         if (bare.length) {
           const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "thumb-grid-"));
           try {

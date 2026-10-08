@@ -48,6 +48,9 @@ export function savePublishEdits(projectId: string, edit: PublishEdit): PublishI
         highlight: String(t.highlight ?? "").trim().slice(0, 30),
         ...(t.gesture ? { gesture: String(t.gesture).trim().slice(0, 40) } : {}),
         ...(t.launch ? { launch: true } : {}),
+        ...(t.brand?.company?.trim()
+          ? { brand: { company: String(t.brand.company).trim().slice(0, 30), kicker: String(t.brand.kicker ?? "").trim().slice(0, 24) } }
+          : {}),
         ...(t.bubble?.text?.trim() ? { bubble: { text: String(t.bubble.text).trim().slice(0, 24), ...(t.bubble.cross ? { cross: true } : {}) } } : {}),
       }))
       .filter((t) => t.text);
