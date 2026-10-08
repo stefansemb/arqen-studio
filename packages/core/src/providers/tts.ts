@@ -42,7 +42,8 @@ function body(text: string, voice: VoiceChoice, extra: Record<string, unknown> =
 
 export class ElevenLabsTts implements TtsProvider {
   name = "elevenlabs";
-  maxChars = 4500;
+  // Long generations drift: past ~2 minutes the voice gets quieter and duller. Shorter requests stay even.
+  maxChars = 1200;
   private apiKey = requireEnv("ELEVENLABS_API_KEY");
 
   constructor(private voice: VoiceChoice = defaultVoice()) {}

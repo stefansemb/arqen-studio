@@ -42,17 +42,6 @@ export async function probeDuration(file: string): Promise<number> {
   return d;
 }
 
-/** Mean loudness in dB of a file, or of [fromSec, toSec) of it (ffmpeg volumedetect). */
-export async function meanVolume(file: string, fromSec?: number, toSec?: number): Promise<number> {
-  const range = [...(fromSec !== undefined ? ["-ss", String(fromSec)] : []), ...(toSec !== undefined ? ["-to", String(toSec)] : [])];
-  const { stderr } = await run("ffmpeg", ["-hide_banner", "-nostats", ...range, "-i", file, "-vn", "-af", "volumedetect", "-f", "null", "-"], {
-    maxBuffer: 16 * 1024 * 1024,
-  });
-  const m = /mean_volume:\s*(-?[\d.]+) dB/.exec(stderr);
-  if (!m) throw new Error(`ffmpeg could not measure the volume of ${file}`);
-  return parseFloat(m[1]);
-}
-
 /** YouTube plays at about -14 LUFS and never turns quiet audio up, so narration is normalized to that. */
 export const TARGET_LUFS = -14;
 
@@ -67,29 +56,43 @@ export async function measureLoudness(file: string): Promise<{ i: number; tp: nu
   return { i: Number(j.input_i), tp: Number(j.input_tp), lra: Number(j.input_lra), thresh: Number(j.input_thresh) };
 }
 
-/** Gain plus a true-peak limiter: oversampled so it also catches the peaks between samples that mp3 encoding brings back. */
+/**
+ * Narration lands 1 LU under YouTube's level: the last LU costs a lot of limiting, and limiting is what made the
+ * voice sound like a cheap microphone (at -14 the old fast limiter was pressing on most of every sentence).
+ */
+export const VOICE_LUFS = -15;
+
+/**
+ * A gentle compressor evens the voice first, so only the odd peak reaches the limiter; that limiter releases
+ * slowly, so it turns the level down instead of bending the waveform. Oversampled so it also catches the peaks
+ * between samples that mp3 encoding brings back.
+ */
 export function loudnessFilter(gainDb: number): string {
   // 0.79 = -2 dBFS, which keeps the encoded true peak under -1 dBTP.
-  return `volume=${gainDb.toFixed(2)}dB,aresample=192000,alimiter=limit=0.79:attack=1:release=20:level=false,aresample=44100`;
+  return [
+    "acompressor=threshold=-24dB:ratio=2.5:attack=20:release=250:knee=6",
+    `volume=${gainDb.toFixed(2)}dB`,
+    "aresample=192000,alimiter=limit=0.79:attack=5:release=200:level=false,aresample=44100",
+  ].join(",");
 }
 
 /**
- * Brings an mp3 to TARGET_LUFS in place. loudnorm alone can't: ElevenLabs voices peak high, so its linear mode
- * stops at the peak ceiling about 3 LU short. Instead: gain, limit the few peaks, re-measure and correct, since
- * limiting costs a little loudness. Returns the loudness before, or null when it was already within 1 LU with
- * headroom. Duration is unchanged, so word timings still match.
+ * Brings an mp3 to VOICE_LUFS in place. loudnorm alone can't: ElevenLabs voices peak high, so its linear mode
+ * stops at the peak ceiling short of the target. Instead: compress, gain, limit, re-measure and correct, since
+ * compression and limiting cost loudness. Returns the loudness before, or null when it was already within 1 LU
+ * with headroom. Duration is unchanged, so word timings still match.
  */
 export async function normalizeLoudness(file: string): Promise<number | null> {
   const m = await measureLoudness(file);
-  if (!Number.isFinite(m.i) || (Math.abs(m.i - TARGET_LUFS) <= 1 && m.tp <= -1)) return null;
+  if (!Number.isFinite(m.i) || (Math.abs(m.i - VOICE_LUFS) <= 1 && m.tp <= -1)) return null;
   const tmp = `${file}.norm.mp3`;
-  let gain = TARGET_LUFS - m.i;
-  for (let pass = 0; pass < 3; pass++) {
+  let gain = VOICE_LUFS - m.i;
+  for (let pass = 0; pass < 4; pass++) {
     await run("ffmpeg", ["-y", "-v", "error", "-i", file, "-af", loudnessFilter(gain), "-c:a", "libmp3lame", "-b:a", "192k", tmp]);
     const after = await measureLoudness(tmp);
-    if (!Number.isFinite(after.i) || Math.abs(after.i - TARGET_LUFS) <= 0.5) break;
-    // Limiting takes more as the gain rises, so a plain correction only closes about half the gap.
-    gain += 1.5 * (TARGET_LUFS - after.i);
+    if (!Number.isFinite(after.i) || Math.abs(after.i - VOICE_LUFS) <= 0.5) break;
+    // The compressor takes back part of every dB added, so a plain correction only closes about half the gap.
+    gain += 1.7 * (VOICE_LUFS - after.i);
   }
   fs.renameSync(tmp, file);
   return m.i;

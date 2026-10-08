@@ -108,7 +108,7 @@ const PickSchema = z.object({
       spokenHook: z
         .string()
         .describe(
-          "One sentence (6-14 words) spoken before the clip that makes a scroller stop: the most surprising claim or question from the clip itself, naming the subject. No 'In this video', no 'Let's'. Must be backed by the clip's sentences.",
+          "One sentence (6-14 words) spoken before the clip that makes a scroller stop: the most surprising claim or question from the clip itself, naming the subject. No 'In this video', no 'Let's'. Must be backed by the clip's sentences. The clip plays right after it, so never repeat or reword the clip's first sentence.",
         ),
       title: z.string().describe("YouTube Shorts title, under 70 characters, no hashtags"),
       reason: z.string().describe("One sentence: why this works as a Short"),
@@ -117,6 +117,19 @@ const PickSchema = z.object({
 });
 
 type Sentence = { start: number; end: number };
+
+const contentWords = (text: string) => text.toLowerCase().match(/[a-z0-9']{3,}/g) ?? [];
+
+/**
+ * True when a spoken hook mostly says what the clip's first sentence says, so the Short would open by saying
+ * the same thing twice. Pure, so it can be unit tested.
+ */
+export function echoesOpening(hook: string, opening: string): boolean {
+  const words = contentWords(hook);
+  if (!words.length) return false;
+  const said = new Set(contentWords(opening));
+  return words.filter((w) => said.has(w)).length / words.length >= 0.6;
+}
 
 /**
  * Turns a picked sentence range into seconds. Claude often picks a whole story (~100 s), so
@@ -169,13 +182,16 @@ ${sentences.map((s) => `[${s.index}] ${s.start.toFixed(1)}-${s.end.toFixed(1)} (
     if (!range) continue;
     const { start, end } = range;
     if (out.some((o) => start < o.end && end > o.start)) continue;
+    // A hook that echoes the opening line is dropped: the clip already starts with it.
+    const opening = sentences.find((x) => x.index === s.startSentence)?.text ?? "";
+    const spokenHook = echoesOpening(s.spokenHook, opening) ? "" : s.spokenHook.trim().slice(0, 160);
     out.push({
       id: `short-${out.length + 1}`,
       start,
       end,
       title: s.title.trim().slice(0, 90),
       hookText: s.hookText.trim().slice(0, 60),
-      spokenHook: s.spokenHook.trim().slice(0, 160),
+      spokenHook,
       reason: s.reason,
     });
   }

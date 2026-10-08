@@ -187,22 +187,26 @@ export async function getAccessToken(force = false): Promise<string> {
   return fresh.access_token;
 }
 
-/** Pause before retrying a rejected token; a just-issued one can take a moment to be accepted everywhere. */
-const RETRY_401_MS = 1500;
+/** Pauses before each retry of a rejected token. */
+const RETRY_401_MS = [1000, 2000, 4000, 8000];
 
 /**
- * Sends a request with `token`; on a 401 gets a fresh token, waits briefly and sends it once more. YouTube now
- * and then rejects a valid token (seen 130 ms after a refresh, and once mid-upload on a token with 8 minutes left).
+ * Sends a request with `token`, retrying on a 401. Right after a refresh or a reconnect, YouTube rejects a valid
+ * token on about half of the requests for a while (Google's servers pick it up one by one). A new token restarts
+ * that, so the same token is retried first and a fresh one is only fetched for the last attempt.
  */
 async function sendWithAuth(
   token: string,
   send: (token: string) => Promise<Response>,
   refresh: () => Promise<string> = () => getAccessToken(true),
 ): Promise<Response> {
-  const res = await send(token);
-  if (res.status !== 401) return res;
-  await new Promise((r) => setTimeout(r, RETRY_401_MS));
-  return send(await refresh());
+  let res = await send(token);
+  for (const [i, wait] of RETRY_401_MS.entries()) {
+    if (res.status !== 401) return res;
+    await new Promise((r) => setTimeout(r, wait));
+    res = await send(i === RETRY_401_MS.length - 1 ? await refresh() : token);
+  }
+  return res;
 }
 
 /**
@@ -304,11 +308,7 @@ export function buildVideoResource(publish: Pick<PublishInfo, "title" | "descrip
 // 8 MiB; resumable chunks must be multiples of 256 KiB.
 const CHUNK = 32 * 256 * 1024;
 
-/**
- * Resumable upload (https://developers.google.com/youtube/v3/guides/using_resumable_upload_protocol).
- * Sends the file in chunks and resumes from the server's reported offset after a failed chunk.
- */
-export async function uploadVideo(opts: {
+type UploadOpts = {
   file: string;
   resource: ReturnType<typeof buildVideoResource>;
   notifySubscribers: boolean;
@@ -317,7 +317,35 @@ export async function uploadVideo(opts: {
   chunkSize?: number;
   /** Fresh token after a 401; tests stub it. */
   refreshToken?: () => Promise<string>;
-}): Promise<{ id: string }> {
+};
+
+/** YouTube dropped the upload session (410/404); only a new one helps. */
+class SessionGone extends Error {}
+
+/** Attempts per upload; each one starts a new session. */
+const UPLOAD_ATTEMPTS = 3;
+
+/**
+ * Resumable upload (https://developers.google.com/youtube/v3/guides/using_resumable_upload_protocol).
+ * Sends the file in chunks and resumes from the server's reported offset after a failed chunk.
+ * If YouTube drops the session, starts a new one.
+ */
+export async function uploadVideo(opts: UploadOpts): Promise<{ id: string }> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await uploadOnce(opts);
+    } catch (err) {
+      // The dropped session leaves an empty video in Studio (YouTube creates it at the start and gives no id
+      // until the end), but without a retry the upload fails outright and gets started over by hand anyway.
+      if (!(err instanceof SessionGone) || attempt >= UPLOAD_ATTEMPTS) {
+        throw err instanceof SessionGone ? new YouTubeError(`Uploading the video failed: YouTube dropped the upload ${UPLOAD_ATTEMPTS} times. Try again in a while.`) : err;
+      }
+      await new Promise((r) => setTimeout(r, 2000 * attempt));
+    }
+  }
+}
+
+async function uploadOnce(opts: UploadOpts): Promise<{ id: string }> {
   const size = fs.statSync(opts.file).size;
   const chunkSize = opts.chunkSize ?? CHUNK;
   const init = await sendWithAuth(
@@ -378,6 +406,7 @@ export async function uploadVideo(opts: {
         offset = await queryOffset(session, size);
         continue;
       }
+      if (res.status === 410 || res.status === 404) throw new SessionGone();
       throw await apiError(res, "Uploading the video");
     }
   } finally {
@@ -391,6 +420,7 @@ async function queryOffset(session: string, size: number): Promise<number> {
     const range = res.headers.get("range");
     return range ? Number(range.split("-")[1]) + 1 : 0;
   }
+  if (res.status === 410 || res.status === 404) throw new SessionGone();
   throw await apiError(res, "Resuming the upload");
 }
 

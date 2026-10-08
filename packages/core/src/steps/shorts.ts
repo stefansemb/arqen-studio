@@ -5,7 +5,7 @@ import { renderMedia, selectComposition } from "@remotion/renderer";
 import { readJson, type StepContext } from "../context";
 import { buildShortProps, hookAudioKey, readShorts, writeShorts, type ShortSpec } from "../shorts";
 import { defaultVoice, getTtsProvider, type VoiceChoice } from "../providers/tts";
-import { meanVolume, probeDuration, runFfmpeg } from "../providers/ffmpeg";
+import { normalizeLoudness, probeDuration, VOICE_LUFS } from "../providers/ffmpeg";
 import { readAppSettings, resolveVoice } from "../settings";
 import { charsToWords, scriptToText } from "../timing";
 import type { Script, Timings } from "../types";
@@ -50,15 +50,13 @@ async function ensureHookAudio(ctx: StepContext, short: ShortSpec): Promise<Shor
   const out = path.join(ctx.dir, file);
   const raw = path.join(ctx.dir, `shorts/${short.id}-hook.raw.mp3`);
   fs.writeFileSync(raw, audio);
-  // Match the narration's loudness so the clip doesn't drop in volume after the hook.
-  const gain = Math.max(-15, Math.min(15, (await meanVolume(path.join(ctx.dir, "voice.mp3"), short.start, short.end)) - (await meanVolume(raw))));
-  if (Math.abs(gain) > 1) {
-    await runFfmpeg(["-y", "-i", raw, "-af", `volume=${gain.toFixed(1)}dB`, "-c:a", "libmp3lame", "-b:a", "192k", out]);
-    fs.rmSync(raw);
-    ctx.log(`Hook loudness matched to the narration (${gain > 0 ? "+" : ""}${gain.toFixed(1)} dB)`);
-  } else {
-    fs.renameSync(raw, out);
-  }
+  // Same processing as the narration, so the hook and the clip after it sound alike and the hook can't clip.
+  const before = await normalizeLoudness(raw).catch((err) => {
+    ctx.log(`Could not normalize the hook loudness: ${(err as Error).message}`, "warn");
+    return null;
+  });
+  fs.renameSync(raw, out);
+  if (before !== null) ctx.log(`Hook normalized from ${before.toFixed(1)} to ${VOICE_LUFS} LUFS`);
   const hookAudio = { file, key, durationSec: await probeDuration(out), words: charsToWords(alignment) };
   writeShorts(
     ctx.project.id,

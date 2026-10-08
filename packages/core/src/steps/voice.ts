@@ -4,7 +4,7 @@ import path from "node:path";
 import { readJson, writeJson, type StepContext } from "../context";
 import { getTtsProvider } from "../providers/tts";
 import { resolveVoice } from "../settings";
-import { concatAudio, normalizeLoudness, probeDuration } from "../providers/ffmpeg";
+import { concatAudio, normalizeLoudness, probeDuration, VOICE_LUFS } from "../providers/ffmpeg";
 import { charsToWords, chunkText, scriptToText } from "../timing";
 import type { Script, Timings, Word } from "../types";
 
@@ -50,6 +50,8 @@ export async function generateVoice(ctx: StepContext): Promise<void> {
     });
     const file = path.join(tmp, `chunk-${String(i).padStart(3, "0")}.mp3`);
     fs.writeFileSync(file, audio);
+    // Level each chunk on its own, so one quieter generation can't sink part of the video.
+    await normalizeLoudness(file).catch((err) => ctx.log(`Could not normalize chunk ${i + 1}: ${(err as Error).message}`, "warn"));
     files.push(file);
     words.push(...charsToWords(alignment, offset));
     offset += await probeDuration(file);
@@ -71,11 +73,11 @@ export async function generateVoice(ctx: StepContext): Promise<void> {
   ctx.log(`Voiceover ready: ${timings.durationSec.toFixed(1)} s, ${words.length} words`);
 }
 
-/** Voices differ a lot in level (some land near -25 LUFS); bring the narration to YouTube's playback loudness. */
+/** Voices differ a lot in level (some land near -25 LUFS); bring the narration up near YouTube's playback loudness. */
 async function normalize(ctx: StepContext, file: string): Promise<void> {
   try {
     const before = await normalizeLoudness(file);
-    if (before !== null) ctx.log(`Voiceover normalized from ${before.toFixed(1)} to -14 LUFS`);
+    if (before !== null) ctx.log(`Voiceover normalized from ${before.toFixed(1)} to ${VOICE_LUFS} LUFS`);
   } catch (err) {
     ctx.log(`Could not normalize the voiceover loudness: ${(err as Error).message}`, "warn");
   }

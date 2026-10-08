@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { judgeRender, parseMeasure, sampleTimes, type RenderExpect, type RenderMeasure } from "../src/verify";
+import { judgeRender, levelDrops, parseMeasure, sampleTimes, type RenderExpect, type RenderMeasure } from "../src/verify";
 
 const probe = JSON.stringify({
   streams: [
@@ -68,5 +68,34 @@ describe("sampleTimes", () => {
     expect(s[0]).toBe(0);
     expect(s.at(-1)).toBe(99);
     expect(sampleTimes([1, 2, 3])).toEqual([1, 2, 3]);
+  });
+});
+
+describe("levelDrops", () => {
+  // One reading per second over 4 minutes; pauses every 5 s sit at -120 like real ebur128 output.
+  const curve = (level: (at: number) => number): [number, number][] =>
+    Array.from({ length: 240 }, (_, at): [number, number] => [at, at % 5 === 4 ? -120.7 : level(at)]);
+
+  it("reads short-term loudness from ebur128's per-frame lines", () => {
+    const line = (at: number, s: string) =>
+      `[Parsed_ebur128_0 @ 0] t: ${at}   TARGET:-23 LUFS    M: -13.2 S:${s}     I: -11.7 LUFS       LRA:   0.0 LU  FTPK:  -8.0  -8.0 dBFS  TPK:  -5.2  -5.2 dBFS`;
+    const m = parseMeasure(probe, `${line(0.1, "-inf")}\n${line(3.0, "-14.2")}\n${stderr}`);
+    expect(m.shortTerm).toEqual([[3, -14.2]]);
+    expect(m.lufs).toBe(-17.4);
+  });
+
+  it("passes an even voice and flags one that sinks halfway through", () => {
+    expect(levelDrops(curve(() => -14), [0, 240])).toEqual([]);
+    const drops = levelDrops(curve((at) => (at < 130 ? -14 : -27)), [0, 240]);
+    expect(drops.map((d) => d.from)).toEqual([120, 150, 180, 210]);
+    // Sinking for most of the video is still caught.
+    expect(levelDrops(curve((at) => (at < 70 ? -14 : -27)), [0, 240])).toHaveLength(6);
+  });
+
+  it("fails the render on a sinking voice", () => {
+    const clean = { ...parseMeasure(probe, stderr), black: [] as [number, number][] };
+    const check = (shortTerm: [number, number][]) => judgeRender({ ...clean, shortTerm }, expect264).find((c) => c.name === "even voice level");
+    expect(check(curve(() => -14))?.ok).toBe(true);
+    expect(check(curve((at) => (at < 130 ? -14 : -27)))).toMatchObject({ ok: false, level: "fail" });
   });
 });

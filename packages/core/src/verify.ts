@@ -31,6 +31,8 @@ export interface RenderMeasure {
   silence: [number, number][];
   lufs: number | null;
   truePeak: number | null;
+  /** Short-term loudness (3 s window) over time: [seconds, LUFS]. */
+  shortTerm: [number, number][];
 }
 
 export interface RenderCheck {
@@ -55,6 +57,9 @@ const EDGE_SEC = 0.5;
 /** Silence this long inside the narration means the voice dropped out. */
 const SILENCE_SEC = 3;
 const AV_DRIFT_SEC = 0.12;
+/** The narration is judged in blocks this long; a block this far below the loudest one means the level sank. */
+const LEVEL_BLOCK_SEC = 30;
+const LEVEL_DROP_DB = 6;
 
 const num = (s: string | undefined) => (s === undefined ? NaN : parseFloat(s));
 
@@ -68,9 +73,12 @@ export function parseMeasure(probeJson: string, stderr: string): RenderMeasure {
   const starts = [...stderr.matchAll(/silence_start:\s*(-?[\d.]+)/g)].map((m) => num(m[1]));
   const ends = [...stderr.matchAll(/silence_end:\s*([\d.]+)/g)].map((m) => num(m[1]));
   const silence = starts.map((s, i): [number, number] => [Math.max(0, s), ends[i] ?? Infinity]);
-  // ebur128 prints its summary last; per-frame lines stay hidden at framelog=verbose.
+  // ebur128 prints its summary last, after the per-frame lines (one per 0.1 s) that give the short-term level.
   const lufs = [...stderr.matchAll(/\bI:\s+(-?[\d.]+) LUFS/g)].pop();
   const peak = [...stderr.matchAll(/Peak:\s+(-?[\d.]+|-inf) dBFS/g)].pop();
+  const shortTerm = [...stderr.matchAll(/\bt:\s*([\d.]+)\s+TARGET:.*?\bS:\s*(-?[\d.]+|-inf)/g)]
+    .filter((m) => m[2] !== "-inf")
+    .map((m): [number, number] => [num(m[1]), num(m[2])]);
   return {
     video: v ? { codec: String(v.codec_name), width: Number(v.width), height: Number(v.height), fps: d ? n / d : 0, durationSec: num(String(v.duration)) } : null,
     audio: a ? { codec: String(a.codec_name), durationSec: num(String(a.duration)) } : null,
@@ -78,7 +86,26 @@ export function parseMeasure(probeJson: string, stderr: string): RenderMeasure {
     silence,
     lufs: lufs ? num(lufs[1]) : null,
     truePeak: peak && peak[1] !== "-inf" ? num(peak[1]) : null,
+    shortTerm,
   };
+}
+
+const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+
+/**
+ * Narration blocks whose median short-term loudness sits LEVEL_DROP_DB or more below the loudest block. The loudest,
+ * not the median, so a voice that sinks for most of the video still has a reference.
+ */
+export function levelDrops(shortTerm: [number, number][], [n0, n1]: [number, number]): { from: number; to: number; lufs: number; loudest: number }[] {
+  const blocks: { from: number; to: number; lufs: number }[] = [];
+  for (let from = n0; from < n1 - LEVEL_BLOCK_SEC / 2; from += LEVEL_BLOCK_SEC) {
+    const to = Math.min(from + LEVEL_BLOCK_SEC, n1);
+    // Pauses between sentences are not the voice getting quieter.
+    const xs = shortTerm.filter(([at, l]) => at >= from && at < to && l > -50).map(([, l]) => l);
+    if (xs.length) blocks.push({ from, to, lufs: median(xs) });
+  }
+  const loudest = Math.max(...blocks.map((b) => b.lufs));
+  return blocks.filter((b) => loudest - b.lufs >= LEVEL_DROP_DB).map((b) => ({ ...b, loudest }));
 }
 
 const t = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`;
@@ -112,6 +139,12 @@ export function judgeRender(m: RenderMeasure, e: RenderExpect): RenderCheck[] {
 
   if (m.lufs === null) add("loudness", false, "warn", "Could not measure");
   else add("loudness", Math.abs(m.lufs - TARGET_LUFS) <= 2, "warn", `${m.lufs.toFixed(1)} LUFS (YouTube plays at ${TARGET_LUFS}; it turns loud videos down but never quiet ones up)`);
+  if (m.shortTerm.length) {
+    const drops = levelDrops(m.shortTerm, e.narration);
+    add("even voice level", !drops.length, "fail", drops.length
+      ? drops.map((d) => `${t(d.from)}-${t(d.to)} at ${d.lufs.toFixed(1)} LUFS vs ${d.loudest.toFixed(1)} at its loudest`).join(", ")
+      : "no part of the narration sinks");
+  }
   if (m.truePeak !== null) add("peak", m.truePeak <= -1, "warn", `${m.truePeak.toFixed(1)} dBFS true peak (keep under -1)`);
   return checks;
 }
@@ -124,7 +157,7 @@ export async function measureRender(file: string): Promise<RenderMeasure> {
     [
       "-hide_banner", "-nostats", "-i", file,
       "-vf", `scale=192:-2,blackdetect=d=${BLACK_MIN_SEC}:pix_th=0.08`,
-      "-af", `silencedetect=n=-50dB:d=${SILENCE_SEC},ebur128=peak=true:framelog=verbose`,
+      "-af", `silencedetect=n=-50dB:d=${SILENCE_SEC},ebur128=peak=true:framelog=info`,
       "-f", "null", "-",
     ],
     { maxBuffer: 64 * 1024 * 1024 },

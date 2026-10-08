@@ -27,6 +27,8 @@ describe("uploadVideo (resumable protocol against a mock server)", () => {
   let server: http.Server;
   let received = Buffer.alloc(0);
   let failedOnce = false;
+  let dropSession = false;
+  let inits = 0;
   let initBody: unknown;
   let initHeaders: http.IncomingHttpHeaders = {};
   const file = path.join(os.tmpdir(), `yta-upload-test-${process.pid}.bin`);
@@ -46,6 +48,7 @@ describe("uploadVideo (resumable protocol against a mock server)", () => {
             res.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ error: { code: 401, errors: [{ reason: "authError" }] } }));
             return;
           }
+          inits++;
           initBody = JSON.parse(body.toString());
           initHeaders = req.headers;
           res.writeHead(200, { Location: `${base}/session` }).end();
@@ -60,6 +63,13 @@ describe("uploadVideo (resumable protocol against a mock server)", () => {
             return;
           }
           const [, start, , total] = range.match(/^bytes (\d+)-(\d+)\/(\d+)$/)!.map(Number);
+          // YouTube now and then drops a session mid-upload.
+          if (dropSession) {
+            dropSession = false;
+            received = Buffer.alloc(0);
+            res.writeHead(410).end();
+            return;
+          }
           // Simulate one transient server error on the second chunk, after nothing was stored.
           if (start > 0 && !failedOnce) {
             failedOnce = true;
@@ -104,7 +114,7 @@ describe("uploadVideo (resumable protocol against a mock server)", () => {
     expect(progress[progress.length - 1]).toBe(1);
   }, 20000);
 
-  it("gets a fresh token and retries once when the start of the upload is rejected with 401", async () => {
+  it("retries a 401 at the start of the upload, with a fresh token only as the last attempt", async () => {
     received = Buffer.alloc(0);
     let refreshed = 0;
     const result = await uploadVideo({
@@ -121,5 +131,22 @@ describe("uploadVideo (resumable protocol against a mock server)", () => {
     expect(result).toEqual({ id: "vid123" });
     expect(refreshed).toBe(1);
     expect(initHeaders.authorization).toBe("Bearer fresh-token");
+  }, 20000);
+
+  it("starts a new session when YouTube drops the upload with 410", async () => {
+    received = Buffer.alloc(0);
+    failedOnce = true;
+    dropSession = true;
+    inits = 0;
+    const result = await uploadVideo({
+      file,
+      resource: buildVideoResource(publish, opts),
+      notifySubscribers: false,
+      accessToken: "test-token",
+      chunkSize: 4000,
+    });
+    expect(result).toEqual({ id: "vid123" });
+    expect(inits).toBe(2);
+    expect(received.equals(content)).toBe(true);
   }, 20000);
 });

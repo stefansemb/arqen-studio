@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { NewsVideoProps } from "@yta/video";
-import { fitShortRange, prependHook, sliceVideoProps } from "../src/shorts";
+import { echoesOpening, fitShortRange, prependHook, sliceVideoProps } from "../src/shorts";
 
 const full: NewsVideoProps = {
   title: "t",
@@ -114,5 +114,26 @@ describe("prependHook", () => {
 
   it("leaves the Short unchanged without a hook", () => {
     expect(prependHook(short, 0, [])).toBe(short);
+  });
+});
+
+describe("echoesOpening", () => {
+  it("catches a hook that rewords the clip's first sentence", () => {
+    expect(
+      echoesOpening(
+        "Anthropic just slashed its cheapest AI model's price by ninety percent overnight.",
+        "Anthropic just slashed its cheapest model's price by ninety percent, and it now costs exactly the same as OpenAI's newest small model.",
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps a hook that says something the opening doesn't", () => {
+    expect(
+      echoesOpening(
+        "One hidden setting makes Claude Haiku's benchmark score jump from 20% to 39%.",
+        "On SWE-bench Verified, Haiku scores about twenty percent at its default effort.",
+      ),
+    ).toBe(false);
+    expect(echoesOpening("", "Anything.")).toBe(false);
   });
 });
