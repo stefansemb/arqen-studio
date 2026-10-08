@@ -6,7 +6,7 @@ import { generateStructured } from "../llm";
 import { readJson, writeJson, type StepContext } from "../context";
 import { channelName } from "../channels";
 import { SOURCE_NAMES } from "../providers/images";
-import { buildChapters, composeDescription, fitTags, stripDashes, YT, type PublishInfo } from "../publish";
+import { buildChapters, composeDescription, fitTags, stripDashes, YT, type PublishInfo, type ThumbnailText } from "../publish";
 import { getTemplate } from "../templates";
 import { readAppSettings } from "../settings";
 import type { Article, PlannedScene, Script, Timings } from "../types";
@@ -28,11 +28,16 @@ const MetadataSchema = z.object({
         bubble: z.string().describe("Presenter thought bubble, 1-3 words, or empty; see the instructions"),
         bubbleCross: z.boolean().describe("Cross the bubble out with a red X"),
         launch: z.boolean().describe("Launch layout: true only when text is just the new product's name and version"),
-        company: z.string().describe("Brand card: the company behind the new model or product, or empty; see the instructions"),
-        kicker: z.string().describe("Brand card line above the name, e.g. Introducing; empty without company"),
       }),
     )
     .describe("3 thumbnail text options following the thumbnail text rules"),
+  launch: z
+    .object({
+      company: z.string().describe("The maker, e.g. Anthropic, OpenAI, Google, Google DeepMind, Meta, xAI, Mistral, DeepSeek"),
+      product: z.string().describe("Only the product name with its version, under 15 characters, e.g. Haiku 5.5, Gemini Agent"),
+      kicker: z.string().describe('"Introducing" for a release or launch, "First preview of" for a preview or early access, "Leaked:" for a leak'),
+    })
+    .describe("Whether the video is about a new AI model, product, agent or feature being released, previewed or leaked; all fields empty when it is not"),
   commentQuestion: z
     .string()
     .describe("Opening of the channel's pinned comment: 1-2 short sentences ending in a specific question viewers want to answer; no links, no hashtags"),
@@ -74,11 +79,9 @@ anything the video does not deliver, no ALL CAPS titles, at most one emoji. Vary
 Description summary: first sentence works as a search snippet; plain language; no "In this video".
 Never use em dashes or en dashes anywhere (titles, description, chapters, thumbnail text, comment): use a colon, a comma or a new sentence instead.
 ${template.packaging ?? DEFAULT_PACKAGING}
-Brand card: when the story is the release, preview or leak of a new AI model or product, make the FIRST option a brand card:
-company is the maker ("Anthropic", "OpenAI", "Google DeepMind", "Meta", "xAI", "Mistral", "DeepSeek"), text is only the product
-name with its version ("Haiku 5.5", "GPT-7 'Bel'", "Gemini 4 Argon"), under 15 characters, and kicker says what happened:
-"Introducing" for a release, "First preview of" for a preview or early access, "Leaked:" for a leak. It shows the company's logo
-and colors with no picture or presenter. Leave company and kicker empty on every other option and for other stories.${
+Launch: fill in launch whenever the story is a new AI model, product, agent or feature that is released, previewed or leaked,
+even when the video is about what it does. A brand card (the company's logo and colors, the kicker and the product name) is
+then shown second, after your first thumbnail text.${
       gestures.length
         ? `\nThumbnail gesture: the presenter stands on the right, next to the text. The FIRST option is the one used, and its gesture should be thinking unless another gesture clearly fits better: thinking suits most news, analysis, AI safety and legal twists.
 Gestures ending in "-serious" have a calm, closed-mouth face; the same gesture without it has a big smile. Prefer the
@@ -88,7 +91,7 @@ Use a different gesture for each option. Available: ${gestures.join(", ")}.
 Thought bubble: when the story has a twist the presenter can react to, put 1-3 words in a bubble by his head that complete the joke
 or the contradiction, not repeat the text (e.g. text 'It Said "I Love You"', bubble "Mike?" crossed out; text "GPT-6 Delayed", bubble "Again?").
 Set bubbleCross for something wrong, denied or fake. Leave the bubble empty when nothing fits; a forced bubble is worse than none.
-Launch layout: when the story is the release of a new model or product, make the SECOND option a launch thumbnail: launch true, text
+Launch layout: when you fill in launch, make the SECOND thumbnail text a launch thumbnail: launch true, text
 is only the name with its version ("Haiku 5.5", "GPT-6 Luna", "Gemini 4 Pro"), highlight the version number ("5.5"), no bubble.
 It is set on one huge line across the top, so keep it under 12 characters. Never use launch for other stories.${
             recent.length ? `\nThe latest videos already used ${[...new Set(recent)].join(" and ")} on their thumbnail; the first option must use a different gesture so the channel grid doesn't repeat the same face.` : ""
@@ -115,8 +118,11 @@ ${script.hook ? `Hook: ${script.hook}\n` : ""}${script.cta ? `CTA: ${script.cta}
   const titles = m.titles.map((t) => stripDashes(t, ": ")).filter(Boolean).slice(0, 5);
   const previous = readPublish(ctx.dir);
   // The model leans on thinking; never let the used thumbnail repeat the last videos' face.
+  // A launch puts the brand card second, after the presenter, and keeps the first two texts.
+  const brand = m.launch.company.trim() && m.launch.product.trim() ? m.launch : null;
+  const photoTexts = m.thumbnailTexts.slice(0, brand ? 2 : 3);
   const leadGestures = freshLead(
-    m.thumbnailTexts.slice(0, 3).map((t) => (gestures.includes(t.gesture.trim()) ? t.gesture.trim() : undefined)),
+    photoTexts.map((t) => (gestures.includes(t.gesture.trim()) ? t.gesture.trim() : undefined)),
     recent,
     gestures,
   );
@@ -140,16 +146,25 @@ ${script.hook ? `Hook: ${script.hook}\n` : ""}${script.cta ? `CTA: ${script.cta}
     tags: fitTags(m.tags),
     hashtags,
     chapters,
-    thumbnailTexts: m.thumbnailTexts.slice(0, 3).map((t, i) => ({
-      text: stripDashes(t.text, " "),
-      highlight: t.highlight.trim(),
-      ...(t.company.trim() ? { brand: { company: t.company.trim().slice(0, 30), kicker: stripDashes(t.kicker, " ").trim().slice(0, 24) } } : {}),
-      ...(leadGestures[i] ? { gesture: leadGestures[i] } : {}),
-      ...(gestures.length && t.launch ? { launch: true } : {}),
-      ...(gestures.length && t.bubble.trim() && !t.launch
-        ? { bubble: { text: stripDashes(t.bubble, " ").slice(0, 24), ...(t.bubbleCross ? { cross: true } : {}) } }
-        : {}),
-    })),
+    thumbnailTexts: photoTexts
+      .map((t, i): ThumbnailText => ({
+        text: stripDashes(t.text, " "),
+        highlight: t.highlight.trim(),
+        ...(leadGestures[i] ? { gesture: leadGestures[i] } : {}),
+        ...(gestures.length && t.launch ? { launch: true } : {}),
+        ...(gestures.length && t.bubble.trim() && !t.launch
+          ? { bubble: { text: stripDashes(t.bubble, " ").slice(0, 24), ...(t.bubbleCross ? { cross: true } : {}) } }
+          : {}),
+      }))
+      .flatMap((t, i) =>
+        i === 0 && brand
+          ? [t, {
+              text: stripDashes(brand.product, " ").trim().slice(0, 30),
+              highlight: "",
+              brand: { company: brand.company.trim().slice(0, 30), kicker: stripDashes(brand.kicker, " ").trim().slice(0, 24) || "Introducing" },
+            }]
+          : [t],
+      ),
     comment: stripDashes(m.commentQuestion),
     // Keep existing thumbnails until the thumbnail step replaces them.
     thumbnails: previous?.thumbnails ?? [],
