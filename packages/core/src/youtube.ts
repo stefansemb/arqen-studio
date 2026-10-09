@@ -539,6 +539,17 @@ export async function postComment(videoId: string, text: string): Promise<string
 }
 
 /** The video's privacy on YouTube right now ("public", "unlisted", "private"), or undefined if it's gone. */
+/** A channel's newest uploads via its uploads playlist: 1 quota unit, where a search costs 100. */
+export async function channelUploads(channelId: string, max = 10): Promise<{ id: string; title: string; publishedAt: string }[]> {
+  const playlist = `UU${channelId.slice(2)}`;
+  const res = await api("GET", `playlistItems?part=snippet&maxResults=${max}&playlistId=${encodeURIComponent(playlist)}`);
+  if (!res.ok) throw await apiError(res, "Reading the channel's uploads");
+  const items = ((await res.json()) as { items?: { snippet: { title: string; publishedAt: string; resourceId: { videoId: string } } }[] }).items ?? [];
+  return items
+    .filter((i) => i.snippet.title !== "Private video" && i.snippet.title !== "Deleted video")
+    .map((i) => ({ id: i.snippet.resourceId.videoId, title: i.snippet.title, publishedAt: i.snippet.publishedAt }));
+}
+
 export async function videoPrivacy(videoId: string): Promise<string | undefined> {
   const res = await api("GET", `videos?part=status&id=${encodeURIComponent(videoId)}`);
   if (!res.ok) throw await apiError(res, "Reading the video's status");

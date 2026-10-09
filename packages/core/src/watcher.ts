@@ -24,12 +24,12 @@ import {
 import { CHANNEL_NAME, DATA_DIR, projectDir } from "./paths";
 import { readPublish } from "./publishStore";
 import { startUpload } from "./uploadRequest";
-import { makeVideoPrivate, uploadReady } from "./youtube";
+import { channelUploads, makeVideoPrivate, uploadReady } from "./youtube";
 import { notify } from "./telegram";
 import type { Brief } from "./steps/script";
 import type { PacingReport, ScriptCheck } from "./types";
 import type { VerifyReport } from "./verify";
-import { readAppSettings, type AppSettings } from "./settings";
+import { readAppSettings, type AppSettings, type CreatorChannel } from "./settings";
 
 /** Labs' own feeds (fastest, official). The general press feeds come from autopilot settings. */
 export const LAB_FEEDS: FeedSource[] = [
@@ -43,6 +43,8 @@ export const LAB_FEEDS: FeedSource[] = [
 /** Labs without a feed: new links on these pages are new posts. (x.ai/news blocks non-browser clients.) */
 export const LAB_PAGES: WatchPage[] = [
   { name: "Anthropic News", url: "https://www.anthropic.com/news", match: "/news/" },
+  // Claude product launches (e.g. Dashboards and Motion) are posted here, not on anthropic.com/news.
+  { name: "Claude Blog", url: "https://claude.com/blog", match: "/resources/articles/" },
   { name: "Meta AI Blog", url: "https://ai.meta.com/blog/", match: "/blog/" },
   { name: "Mistral News", url: "https://mistral.ai/news", match: "/news/" },
   { name: "DeepSeek News", url: "https://api-docs.deepseek.com/news/", match: "/news/" },
@@ -95,6 +97,45 @@ async function scanHuggingFace(): Promise<{ items: NewsItem[]; errors: string[] 
   return { items: results.flatMap((r) => r.items), errors: results.flatMap((r) => (r.error ? [r.error] : [])) };
 }
 
+/** Other AI channels' videos are tagged "Name (YouTube)": demand signal only, never a confirmation or a source. */
+const CREATOR_SUFFIX = " (YouTube)";
+export const isCreatorSource = (source: string) => source.endsWith(CREATOR_SUFFIX);
+/** This many other AI channels with a video on a story lifts it to tier 1. */
+export const CREATOR_UPGRADE_MIN = 2;
+export const creatorCount = (sources: string[]) => new Set(sources.filter(isCreatorSource)).size;
+
+/** YouTube quota: one unit per channel per scan, so the channels are read at most hourly (~264 units a day for 11). */
+const CREATOR_SCAN_MIN = 60;
+let lastCreatorScan = 0;
+
+/** New uploads of the other AI channels as news items. */
+export function uploadsToItems(uploads: { id: string; title: string; publishedAt: string }[], channel: CreatorChannel): NewsItem[] {
+  return uploads.map((u) => ({
+    title: u.title,
+    url: `https://www.youtube.com/watch?v=${u.id}`,
+    source: `${channel.name}${CREATOR_SUFFIX}`,
+    published: new Date(u.publishedAt).toISOString(),
+    summary: "",
+  }));
+}
+
+async function scanCreators(channels: CreatorChannel[], now: number): Promise<{ items: NewsItem[]; errors: string[] }> {
+  if (!channels.length || now - lastCreatorScan < CREATOR_SCAN_MIN * 60_000) return { items: [], errors: [] };
+  lastCreatorScan = now;
+  const results = await Promise.all(
+    channels.map(async (c) => {
+      try {
+        return { items: uploadsToItems(await channelUploads(c.channelId, 5), c), error: undefined };
+      } catch (err) {
+        return { items: [], error: `${c.name} (YouTube): ${(err as Error).message}` };
+      }
+    }),
+  );
+  const errors = results.flatMap((r) => (r.error ? [r.error] : []));
+  // One sign-in problem fails every channel; report it once.
+  return { items: results.flatMap((r) => r.items), errors: errors.length === channels.length && errors.length > 1 ? [`YouTube channels: ${results[0].error}`] : errors };
+}
+
 /** Community signal; only AI-looking headlines are kept. */
 const HN_FEED: FeedSource = { name: "Hacker News", url: "https://hnrss.org/frontpage?points=100" };
 /** Broad discovery and confirmation. Their links aren't article pages, so a video is never built from them. */
@@ -111,11 +152,11 @@ export const PRESS_FEEDS: FeedSource[] = [
   { name: "The Robot Report", url: "https://www.therobotreport.com/feed/" },
 ];
 
-/** Links that can't be fetched as an article (Google News redirects, Reddit threads). */
+/** Links that can't be fetched as an article (Google News redirects, Reddit threads, YouTube videos). */
 export function isSignalOnlyUrl(url: string): boolean {
   try {
     const host = new URL(url).hostname.replace(/^www\./, "");
-    return host === "news.google.com" || host.endsWith("reddit.com");
+    return host === "news.google.com" || host.endsWith("reddit.com") || host.endsWith("youtube.com") || host === "youtu.be";
   } catch {
     return true;
   }
@@ -174,7 +215,7 @@ const AGGREGATORS = new Set(["google news", "r/singularity", "hacker news"]);
 
 /** Distinct real outlets among a story's sources. Pure. */
 export function distinctOutlets(sources: string[]): number {
-  return new Set(sources.map(outletKey).filter((k) => !AGGREGATORS.has(k))).size;
+  return new Set(sources.filter((s) => !isCreatorSource(s)).map(outletKey).filter((k) => !AGGREGATORS.has(k))).size;
 }
 
 const AI_WORDS = /\b(AI|AGI|LLMs?|GPT[\w.-]*|Claude|Gemini|OpenAI|Anthropic|DeepMind|Llama|Grok|xAI|Mistral|DeepSeek|Qwen|Copilot|agents?|models?|neural|chatbots?)\b/i;
@@ -187,6 +228,7 @@ const SOURCE_COMPANY: Record<string, string> = {
   Qwen: "Alibaba",
   "NVIDIA Newsroom": "NVIDIA",
   "Anthropic News": "Anthropic",
+  "Claude Blog": "Anthropic",
   "Meta AI Blog": "Meta",
   "Mistral News": "Mistral",
   "DeepSeek News": "DeepSeek",
@@ -384,9 +426,12 @@ Tier 1 (make a video right now), only:
   Not tier 1: faster/cheaper/mini variants of an existing model, price or rate-limit changes, and partners' posts about another lab's model (NVIDIA, cloud providers)
 - a major AI safety incident or striking safety research (models deceiving, escaping, sabotaging), when it is concrete and sourced
 - an industry shock: acquisition of or by a top lab, CEO exit, landmark lawsuit or regulation that changes what labs can ship
-Tier 2: notable but not urgent (model variants and smaller updates, product features, funding rounds, research results, policy news).
+- a major new capability in a top lab's own product that viewers can try right away and build with (e.g. Claude or ChatGPT now makes videos, a new agent or coding tool, a new design or app builder). These "it can now do X" launches are what builders search for
+  Not tier 1: small UI tweaks, settings, regional rollouts, enterprise-only or waitlist features, integrations with third-party apps
+Tier 2: notable but not urgent (model variants and smaller updates, smaller product features, funding rounds, research results, policy news).
 Tier 0: everything else (partnerships, customer stories, events, hiring, opinion, tutorials, minor updates, non-AI).
-Be strict with tier 1: at most a few stories a week qualify. Several articles about the same story must get the same storyKey.`;
+Be strict with tier 1: at most a few stories a week qualify. Several articles about the same story must get the same storyKey.
+Sources ending in "(YouTube)" are new videos from other AI YouTube channels, with clickbait titles. Rate them by the story underneath and give them the same storyKey as the articles about it; tier 0 for tutorials, opinion and anything that isn't news. They show what viewers want, not what happened.`;
 
 /** Rates new articles; returns them with tier and story key. */
 export async function classify(items: NewsItem[], known: WatchStory[]) {
@@ -443,7 +488,8 @@ export function decide(g: GateInput): { decision: Decision; note: string } {
       ? { decision: "expired", note: "No article link found (only Google News/Reddit)" }
       : { decision: "waiting", note: "Waiting for a direct article link (only Google News/Reddit so far)" };
   }
-  if (ageH > settings.maxConfirmHours) {
+  // Other channels still uploading about it means there's demand for the rest of the day.
+  if (ageH > settings.maxConfirmHours && creatorCount(story.sources) < CREATOR_UPGRADE_MIN) {
     return { decision: "roundup", note: `Confirmed ${ageH.toFixed(0)} h after it was first seen: too late for a fast video, saved for the roundup` };
   }
   const blocked = capacityBlock(g.recentBuilds, g.creditsLeft, settings, now) ?? (settings.autoBuild ? g.youtubeBlock : undefined);
@@ -515,14 +561,20 @@ export async function runWatcher(opts: { log?: (msg: string) => void } = {}): Pr
     const feeds = [...LAB_FEEDS, ...settings.autopilot.feeds, ...PRESS_FEEDS, HN_FEED, GOOGLE_NEWS, REDDIT_SINGULARITY].filter(
       (f, i, list) => list.findIndex((x) => x.url === f.url) === i,
     );
-    const [feedRes, pageRes, hfRes] = await Promise.all([fetchFeeds(feeds), scanPages(now), scanHuggingFace()]);
-    const errors = [...feedRes.errors, ...pageRes.errors, ...hfRes.errors];
+    const [feedRes, pageRes, hfRes, creatorRes] = await Promise.all([
+      fetchFeeds(feeds),
+      scanPages(now),
+      scanHuggingFace(),
+      scanCreators(settings.watcher.creatorChannels, started),
+    ]);
+    const errors = [...feedRes.errors, ...pageRes.errors, ...hfRes.errors, ...creatorRes.errors];
     const all = [
       ...feedRes.items
         .filter((i) => i.source !== HN_FEED.name || AI_WORDS.test(i.title))
         .map((i) => (i.source === GOOGLE_NEWS.name ? fromGoogleNews(i) : i)),
       ...pageRes.items,
       ...hfRes.items,
+      ...creatorRes.items,
     ];
 
     const known = d.prepare(`SELECT 1 FROM watch_items WHERE key = ?`);
@@ -574,9 +626,14 @@ export async function runWatcher(opts: { log?: (msg: string) => void } = {}): Pr
           : direct && (isSignalOnlyUrl(story.best_url) || (isOfficial && !story.official))
             ? item.url
             : story.best_url;
-        const tier = Math.min(story?.tier || 9, a.tier);
+        let tier = Math.min(story?.tier || 9, a.tier);
         const keepOld = story && (tier !== a.tier || !a.angle);
-        upsert.run(key, story?.title ?? a.storyTitle, tier, keepOld ? story.angle : a.angle, keepOld ? story.reason : a.reason,
+        let reason = keepOld ? story.reason : a.reason;
+        if (tier === 2 && creatorCount(sources) >= CREATOR_UPGRADE_MIN) {
+          tier = 1;
+          reason = `${creatorCount(sources)} other AI channels already have a video on it`;
+        }
+        upsert.run(key, story?.title ?? a.storyTitle, tier, keepOld ? story.angle : a.angle, reason,
           bestUrl, JSON.stringify(sources), story?.official || isOfficial ? 1 : 0, story?.first_seen ?? now, now, now,
           Math.max(story?.score ?? 0, a.videoScore), story?.covered || a.covered ? 1 : 0);
         if (a.covered) covered.add(key);

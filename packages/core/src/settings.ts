@@ -45,6 +45,8 @@ export interface AppSettings {
     dailyPick: boolean;
     /** Local hour (0-23) after which the daily pick may be made. */
     dailyPickHour: number;
+    /** Other AI channels: when several upload about a story, it's in demand and goes to tier 1. */
+    creatorChannels: CreatorChannel[];
   };
   /** Thumbnails: the highlighted word sits in an accent-colored box (like a "FREE" sticker). */
   thumbnailBox: boolean;
@@ -55,6 +57,26 @@ export interface AppSettings {
   /** Defaults for approving uploads from the Batch page. */
   uploadDefaults: { privacy: "private" | "unlisted" | "public" | "schedule"; scheduleTime: string; notifySubscribers: boolean };
 }
+
+export interface CreatorChannel {
+  name: string;
+  channelId: string;
+}
+
+/** Starter list: fast AI news channels plus build-with-AI channels close to this one. */
+export const DEFAULT_CREATOR_CHANNELS: CreatorChannel[] = [
+  { name: "Matt Wolfe", channelId: "UChpleBmo18P08aKCIgti38g" },
+  { name: "Wes Roth", channelId: "UCqcbQf6yw5KzRoDDcZ_wBSw" },
+  { name: "Matthew Berman", channelId: "UCawZsQWqfGSbCI5yjkdVkTA" },
+  { name: "TheAIGRID", channelId: "UCbY9xX3_jW5c2fjlZVBI4cg" },
+  { name: "AI Explained", channelId: "UCNJ1Ymd5yFuUPtn21xtRbbw" },
+  { name: "Fireship", channelId: "UCsBjURrPoezykLs9EqgamOA" },
+  { name: "Chase AI", channelId: "UCoy6cTJ7Tg0dqS-DI-_REsA" },
+  { name: "Jack Roberts", channelId: "UCxVxcTULO9cFU6SB9qVaisQ" },
+  { name: "Success With Sam", channelId: "UCLI_f0zfE2Q9EWoJe_cAwRw" },
+  { name: "Riley Brown", channelId: "UCMcoud_ZW7cfxeIugBflSBw" },
+  { name: "All About AI", channelId: "UCR9j1jqqB5Rse69wjUnbYwA" },
+];
 
 export const DEFAULT_APP_SETTINGS: Omit<AppSettings, "voice"> = {
   descriptionFooter: [
@@ -80,7 +102,7 @@ export const DEFAULT_APP_SETTINGS: Omit<AppSettings, "voice"> = {
   intro: { enabled: false, seconds: 1.5 },
   outro: { enabled: true, seconds: 12 },
   autopilot: { feeds: DEFAULT_FEEDS, maxAgeHours: 72 },
-  watcher: { enabled: false, intervalMin: 15, autoBuild: false, maxPerWeek: 7, cooldownHours: 12, minCreditsLeft: 4000, killWindowMin: 30, maxConfirmHours: 6, dailyPick: true, dailyPickHour: 14 },
+  watcher: { enabled: false, intervalMin: 15, autoBuild: false, maxPerWeek: 7, cooldownHours: 12, minCreditsLeft: 4000, killWindowMin: 30, maxConfirmHours: 6, dailyPick: true, dailyPickHour: 14, creatorChannels: DEFAULT_CREATOR_CHANNELS },
   uploadDefaults: { privacy: "schedule", scheduleTime: "15:00", notifySubscribers: true },
   thumbnailBox: true,
   thumbnailArrow: true,
@@ -153,6 +175,11 @@ function sanitizeWatcher(v: unknown): AppSettings["watcher"] {
     maxConfirmHours: num(w.maxConfirmHours, d.maxConfirmHours, 1, 24),
     dailyPick: typeof w.dailyPick === "boolean" ? w.dailyPick : d.dailyPick,
     dailyPickHour: num(w.dailyPickHour, d.dailyPickHour, 0, 23),
+    creatorChannels: Array.isArray(w.creatorChannels)
+      ? w.creatorChannels
+          .filter((c) => c && typeof c.name === "string" && c.name.trim() && /^UC[\w-]{22}$/.test(String(c.channelId)))
+          .map((c) => ({ name: c.name.trim(), channelId: c.channelId }))
+      : d.creatorChannels,
   };
 }
 

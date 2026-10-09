@@ -4,7 +4,7 @@ import { decide, type GateInput } from "../src/watcher";
 
 const NOW = Date.parse("2026-10-01T12:00:00Z");
 const hoursAgo = (h: number) => new Date(NOW - h * 3600_000).toISOString();
-const settings = { enabled: true, intervalMin: 15, autoBuild: false, maxPerWeek: 2, cooldownHours: 12, minCreditsLeft: 4000, killWindowMin: 30, maxConfirmHours: 6, dailyPick: true, dailyPickHour: 14 };
+const settings = { enabled: true, intervalMin: 15, autoBuild: false, maxPerWeek: 2, cooldownHours: 12, minCreditsLeft: 4000, killWindowMin: 30, maxConfirmHours: 6, dailyPick: true, dailyPickHour: 14, creatorChannels: [] };
 const gate = (over: Omit<Partial<GateInput>, "story"> & { story?: Partial<GateInput["story"]> } = {}): GateInput => ({
   alreadyCovered: false,
   recentBuilds: [],
@@ -239,5 +239,45 @@ describe("daily pick and sources", () => {
     expect(isEstablishedSource("ABC News (Google News)")).toBe(true);
     expect(isSignalOnlyUrl("https://www.reddit.com/r/singularity/comments/1")).toBe(true);
     expect(isSignalOnlyUrl("https://techcrunch.com/2026/10/01/x")).toBe(false);
+  });
+});
+
+describe("other AI channels", () => {
+  const chase = { name: "Chase AI", channelId: "UCoy6cTJ7Tg0dqS-DI-_REsA" };
+
+  it("turns uploads into signal-only items tagged with the channel", async () => {
+    const { uploadsToItems, isCreatorSource, isSignalOnlyUrl } = await import("../src/watcher");
+    const [item] = uploadsToItems([{ id: "abc123def45", title: "Claude Now Does Video", publishedAt: "2026-10-07T15:00:00Z" }], chase);
+    expect(item).toMatchObject({ source: "Chase AI (YouTube)", url: "https://www.youtube.com/watch?v=abc123def45", published: "2026-10-07T15:00:00.000Z" });
+    expect(isCreatorSource(item.source)).toBe(true);
+    expect(isSignalOnlyUrl(item.url)).toBe(true);
+  });
+
+  it("never count as a confirming outlet", async () => {
+    const { distinctOutlets, creatorCount } = await import("../src/watcher");
+    const sources = ["The Decoder", "Chase AI (YouTube)", "Matt Wolfe (YouTube)"];
+    expect(distinctOutlets(sources)).toBe(1);
+    expect(creatorCount(sources)).toBe(2);
+    expect(decide(gate({ story: { official: false, sources } })).decision).toBe("waiting");
+  });
+
+  it("keep a confirmed story buildable past maxConfirmHours while channels cover it", () => {
+    const sources = ["TechCrunch AI", "The Decoder", "Chase AI (YouTube)", "Matt Wolfe (YouTube)"];
+    const late = { official: false, first_seen: hoursAgo(10), best_url: "https://techcrunch.com/x" };
+    expect(decide(gate({ story: { ...late, sources } })).decision).toBe("would_build");
+    expect(decide(gate({ story: { ...late, sources: sources.slice(0, 3) } })).decision).toBe("roundup");
+  });
+});
+
+describe("Claude blog", () => {
+  it("finds product posts and counts them as official Anthropic news", async () => {
+    const { LAB_PAGES, isOfficialFor } = await import("../src/watcher");
+    const page = LAB_PAGES.find((p) => p.name === "Claude Blog")!;
+    const html = `<a href="/resources/articles/dashboards-and-motion">Dashboards and motion</a>
+      <a href="/resources/articles">All articles</a><a href="https://claude.dev/blog/x/">Dev blog</a>`;
+    expect(parsePageLinks(html, page)).toEqual([
+      { title: "Dashboards and motion", url: "https://claude.com/resources/articles/dashboards-and-motion" },
+    ]);
+    expect(isOfficialFor("Claude Blog", "Anthropic")).toBe(true);
   });
 });
