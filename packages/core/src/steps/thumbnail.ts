@@ -132,8 +132,10 @@ export async function renderThumbnails(ctx: StepContext): Promise<void> {
         theme: getChannel().theme,
         ...(presenter && text.bubble && !text.launch ? { bubble: text.bubble } : {}),
         ...(presenter && text.launch ? { launch: true } : {}),
-        // Beside the presenter a tinted backdrop is mostly hidden; a card in real colors shows what the story is.
-        ...(presenter && background ? { imageCard: true } : {}),
+        // Close-up: his face fills the right half and reads on a phone (vidIQ ~49 for the half-body look).
+        // The launch layout keeps its own presenter and picture card.
+        ...(presenter && !text.launch ? { closeUp: true } : {}),
+        ...(presenter && background && text.launch ? { imageCard: true } : {}),
         ...(brand ? { brand } : {}),
       };
       props.push(inputProps);
@@ -149,7 +151,7 @@ export async function renderThumbnails(ctx: StepContext): Promise<void> {
     for (const [i, v] of variants.entries()) {
       if (!v.presenter || !props[i].bubble) continue;
       try {
-        props[i] = { ...props[i], presenterEdge: await presenterEdges(path.join(ctx.dir, v.presenter)) };
+        props[i] = { ...props[i], presenterEdge: await presenterEdges(path.join(ctx.dir, v.presenter), Boolean(props[i].closeUp)) };
       } catch (err) {
         ctx.log(`Bubble placed without the cut-out edge: ${(err as Error).message}`, "warn");
       }
@@ -163,7 +165,7 @@ export async function renderThumbnails(ctx: StepContext): Promise<void> {
         for (const [i, v] of variants.entries()) {
           // A bubble is already the prop; an arrow as well would clutter the picture.
           if (!v.presenter || props[i].bubble || props[i].launch) continue;
-          props[i] = { ...props[i], arrow: { to: "text" }, presenterEdge: await presenterEdges(path.join(ctx.dir, v.presenter)) };
+          props[i] = { ...props[i], arrow: { to: "text" }, presenterEdge: await presenterEdges(path.join(ctx.dir, v.presenter), Boolean(props[i].closeUp)) };
           variants[i] = { ...v, arrow: { to: "text" } };
         }
         const bare = variants.map((v, i) => (v.presenter || props[i].brand ? -1 : i)).filter((i) => i >= 0);

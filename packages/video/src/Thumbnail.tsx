@@ -46,6 +46,11 @@ export interface ThumbnailProps {
    * over a particle wave. Uses no picture or presenter.
    */
   brand?: { company: string; kicker: string };
+  /**
+   * Close-up: the presenter big, cropped at the chest so his face fills the right half and reads on a phone.
+   * The picture goes behind him as a tinted backdrop instead of a card.
+   */
+  closeUp?: boolean;
   /** Draws the labelled cell grid (THUMB_GRID) used when asking which cell holds the thing to point at. */
   grid?: boolean;
 }
@@ -54,6 +59,8 @@ export interface ThumbnailProps {
 export const THUMB_GRID = { cols: 8, rows: 6, cellW: 160, cellH: 120 };
 /** Where the presenter cut-out is fitted (bottom right); core reads his edge with the same numbers. */
 export const PRESENTER_BOX = { right: 20, height: 690, maxWidth: 700 };
+/** Close-up presenter: anchored at the top and cut off by the bottom edge around the chest. */
+export const CLOSEUP_PRESENTER = { right: -40, top: 40, height: 1180, maxWidth: 1000 };
 
 /** The image card's box (before its slight tilt), under the channel name. */
 const CARD = { left: 64, top: 104, width: 470, height: 264 };
@@ -162,15 +169,16 @@ export const Thumbnail: React.FC<ThumbnailProps> = (props) =>
   );
 
 /** The headline over a tinted photo, with the presenter, arrow and bubble. */
-const PhotoThumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlightBox, image, presenter, channel, badge, layout, theme: overrides, arrow, presenterEdge, grid, bubble, imageCard, launch: launchProp }) => {
+const PhotoThumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlightBox, image, presenter, channel, badge, layout, theme: overrides, arrow, presenterEdge, grid, bubble, imageCard, launch: launchProp, closeUp: closeUpProp }) => {
   const theme = resolveTheme(overrides);
   const launch = Boolean(launchProp && presenter);
+  const closeUp = Boolean(closeUpProp && presenter && !launch);
   const rows = launch ? [text.toUpperCase().trim()] : lines(text);
   const longest = Math.max(...rows.map((r) => r.length), 1);
   // The presenter takes the right side, so the text column is a little narrower.
   const textWidth = layout === "full" && !presenter ? 1170 : presenter ? 640 : 700;
   // Big enough to read on a phone, small enough that the longest line fits the text column (heavy caps run ~0.64em a letter).
-  const card = Boolean((imageCard || launch) && presenter && image);
+  const card = Boolean((imageCard || launch) && presenter && image && !closeUp);
   const cardBox = launch ? LAUNCH_CARD : CARD;
   // The card takes the top of the text column, so the headline gets the space below it.
   const textTop = launch ? 14 : card ? CARD.top + CARD.height + 10 : 120;
@@ -212,10 +220,10 @@ const PhotoThumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlightBo
           <div
             style={{
               position: "absolute",
-              right: 40,
-              bottom: -120,
-              width: 620,
-              height: 620,
+              right: closeUp ? -60 : 40,
+              ...(closeUp ? { top: -80 } : { bottom: -120 }),
+              width: closeUp ? 820 : 620,
+              height: closeUp ? 820 : 620,
               borderRadius: "50%",
               background: `radial-gradient(circle, ${theme.accent}aa 0%, ${theme.accent}33 45%, transparent 70%)`,
             }}
@@ -225,12 +233,16 @@ const PhotoThumbnail: React.FC<ThumbnailProps> = ({ text, highlight, highlightBo
             style={{
               position: "absolute",
               // Past the right edge in the launch layout, so the photo's cut side is out of frame.
-              right: launch ? LAUNCH_PRESENTER.right : PRESENTER_BOX.right,
-              bottom: launch ? LAUNCH_PRESENTER.bottom : 0,
-              height: launch ? LAUNCH_PRESENTER.height : PRESENTER_BOX.height,
-              maxWidth: launch ? LAUNCH_PRESENTER.maxWidth : PRESENTER_BOX.maxWidth,
+              ...(closeUp
+                ? { right: CLOSEUP_PRESENTER.right, top: CLOSEUP_PRESENTER.top, height: CLOSEUP_PRESENTER.height, maxWidth: CLOSEUP_PRESENTER.maxWidth }
+                : {
+                    right: launch ? LAUNCH_PRESENTER.right : PRESENTER_BOX.right,
+                    bottom: launch ? LAUNCH_PRESENTER.bottom : 0,
+                    height: launch ? LAUNCH_PRESENTER.height : PRESENTER_BOX.height,
+                    maxWidth: launch ? LAUNCH_PRESENTER.maxWidth : PRESENTER_BOX.maxWidth,
+                  }),
               objectFit: "contain",
-              objectPosition: "bottom right",
+              objectPosition: closeUp ? "top right" : "bottom right",
               filter: `drop-shadow(0 0 3px ${theme.accent2}) drop-shadow(0 18px 40px #000c)`,
             }}
           />

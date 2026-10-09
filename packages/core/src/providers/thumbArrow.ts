@@ -16,6 +16,8 @@ import { PICK_MODEL } from "./imagePick";
 export const THUMB_GRID = { cols: 8, rows: 6, cellW: 160, cellH: 120 };
 /** Must match PRESENTER_BOX in Thumbnail.tsx: the cut-out is fitted into this box at the bottom right. */
 export const PRESENTER_BOX = { right: 20, height: 690, maxWidth: 700 };
+/** Must match CLOSEUP_PRESENTER in Thumbnail.tsx: anchored at the top, cut off by the bottom edge. */
+export const CLOSEUP_PRESENTER = { right: -40, top: 40, height: 1180, maxWidth: 1000 };
 const THUMB_W = 1280;
 const THUMB_H = 720;
 /** Rows of the presenter's edge profile. */
@@ -43,13 +45,14 @@ export function columnLeft(column: string | null | undefined): number | null {
  * The presenter's left edge in thumbnail px for every EDGE_BAND-px row (THUMB_W where he isn't), from the
  * cut-out's alpha channel and the same fit as the Thumbnail component.
  */
-export async function presenterEdges(file: string): Promise<number[]> {
+export async function presenterEdges(file: string, closeUp = false): Promise<number[]> {
   const { width, height } = await imageSize(file);
-  const scale = Math.min(PRESENTER_BOX.height / height, PRESENTER_BOX.maxWidth / width);
+  const box = closeUp ? CLOSEUP_PRESENTER : PRESENTER_BOX;
+  const scale = Math.min(box.height / height, box.maxWidth / width);
   const w = Math.max(1, Math.round(width * scale));
   const h = Math.max(1, Math.round(height * scale));
-  const left = THUMB_W - PRESENTER_BOX.right - w;
-  const top = THUMB_H - h;
+  const left = THUMB_W - box.right - w;
+  const top = closeUp ? CLOSEUP_PRESENTER.top : THUMB_H - h;
   const alpha = await alphaMask(file, w, h);
   const edges: number[] = [];
   for (let y0 = 0; y0 < THUMB_H; y0 += EDGE_BAND) {
