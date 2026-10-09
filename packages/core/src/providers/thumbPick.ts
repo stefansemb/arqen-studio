@@ -46,6 +46,7 @@ export async function scoreBackgrounds(files: string[], topic: string): Promise<
       );
     }
     const { images } = await generateStructured({
+    label: "thumb-pick",
       schema: ScoreSchema,
       model: PICK_MODEL,
       maxTokens: 1500,

@@ -106,6 +106,7 @@ ${describeClips(clips)}`
     : `There are no screen recordings, so do not use "clip" scenes.`;
 
   const { scenes } = await generateStructured({
+    label: "scenes",
     schema: ScenesSchema,
     effort: "medium",
     system: `You are a video editor planning the visuals for a narrated YouTube video. Every moment of the narration needs a visual.

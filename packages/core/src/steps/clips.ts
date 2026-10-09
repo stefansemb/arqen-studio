@@ -51,6 +51,7 @@ Describe what the recording shows as a timeline covering 0 to ${durationSec.toFi
 each part to narration.`,
   });
   return generateStructured({
+    label: "clips",
     schema: DescriptionSchema,
     effort: "low",
     system: "You are a video editor's assistant who logs screen recordings precisely.",

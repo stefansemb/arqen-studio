@@ -88,6 +88,7 @@ Here are ${shown.length} candidate images.`,
   });
 
   const result = await generateStructured({
+    label: "image-pick",
     model: PICK_MODEL,
     maxTokens: 2048,
     schema: PickSchema,

@@ -10,6 +10,7 @@ import path from "node:path";
 import { z } from "zod";
 import { createProject, enqueueJob, getDb, getProject, listProjects, type ProjectRow } from "./db";
 import { generateStructured } from "./llm";
+import { PICK_MODEL } from "./providers/imagePick";
 import { elevenLabsBalance, estimateCredits } from "./autopilot";
 import {
   fetchFeeds,
@@ -440,6 +441,9 @@ export async function classify(items: NewsItem[], known: WatchStory[]) {
     .map((p) => p.title)
     .filter(Boolean);
   const { articles } = await generateStructured({
+    label: "watcher",
+    // Sorting headlines into tiers runs ~50-100 times a day: Haiku is plenty and far cheaper.
+    model: PICK_MODEL,
     schema: ClassifySchema,
     effort: "low",
     maxTokens: 16000,

@@ -133,6 +133,7 @@ ${article.text}
 </source>`;
 
   const generated: Script = await generateStructured({
+    label: "script",
     schema: ScriptSchema,
     system: template.scriptSystem,
     effort: "high",
@@ -187,6 +188,7 @@ export async function checkScript(ctx: StepContext): Promise<void> {
   const channel = channelName();
 
   const { issues, hook } = await generateStructured({
+    label: "script-check",
     schema: CheckSchema,
     effort: "low",
     system: `You are a meticulous fact-checker for a YouTube channel. Compare a narration script against its source (${

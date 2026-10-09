@@ -71,6 +71,7 @@ export async function generateMetadata(ctx: StepContext): Promise<void> {
   ctx.log("Writing title options, description, tags and thumbnail text");
 
   const m = await generateStructured({
+    label: "metadata",
     schema: MetadataSchema,
     effort: "medium",
     system: `You write YouTube packaging for ${channel ? `the channel "${channel}"` : "a YouTube channel"} (${template.label} videos).

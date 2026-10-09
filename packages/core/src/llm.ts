@@ -1,7 +1,10 @@
+import fs from "node:fs";
+import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type { z } from "zod";
 import { decodeEscapes } from "./timing";
+import { DATA_DIR } from "./paths";
 
 let client: Anthropic | undefined;
 const getClient = () => (client ??= new Anthropic());
@@ -12,7 +15,27 @@ export const MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-5";
  * One structured-output call to Claude. Streams (long scripts can take a while)
  * and validates the final JSON against the zod schema.
  */
+/** One line per Claude call in data/llm-usage.jsonl, so the spend can be split by step and model. Never fails the call. */
+function logUsage(label: string, model: string, usage: Anthropic.Usage): void {
+  try {
+    const line = {
+      at: new Date().toISOString(),
+      label,
+      model,
+      in: usage.input_tokens,
+      out: usage.output_tokens,
+      cacheRead: usage.cache_read_input_tokens ?? 0,
+      cacheWrite: usage.cache_creation_input_tokens ?? 0,
+    };
+    fs.appendFileSync(path.join(DATA_DIR, "llm-usage.jsonl"), JSON.stringify(line) + "\n");
+  } catch {
+    // Logging is a nice-to-have.
+  }
+}
+
 export async function generateStructured<T extends z.ZodType>(opts: {
+  /** What the call is for, in the usage log ("watcher", "script", ...). */
+  label?: string;
   schema: T;
   system: string;
   /** Text, or content blocks when sending images. */
@@ -41,6 +64,8 @@ export async function generateStructured<T extends z.ZodType>(opts: {
     }
     throw err;
   }
+
+  logUsage(opts.label ?? "other", model, msg.usage);
 
   if (msg.stop_reason === "refusal") throw new Error("Claude declined this request (refusal).");
   if (msg.stop_reason === "max_tokens") throw new Error("Claude response hit max_tokens; output truncated.");

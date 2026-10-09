@@ -162,6 +162,7 @@ export async function findShorts(projectId: string, count = 3): Promise<ShortSpe
   const sentences = wordsToSentences(timings.words);
 
   const { shorts } = await generateStructured({
+    label: "shorts",
     schema: PickSchema,
     effort: "medium",
     system: `You cut YouTube Shorts from a longer narrated video. A good Short:

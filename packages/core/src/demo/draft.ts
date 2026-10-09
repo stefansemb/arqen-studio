@@ -129,6 +129,7 @@ export async function draftDemoSpec(input: { goal: string; url: string; files?: 
   const page = await inspectPage(input.url);
 
   const draft = await generateStructured({
+    label: "demo-draft",
     schema: DraftSchema,
     effort: "medium",
     system: `You script screen-recorded product demos for a YouTube channel. A robot performs your actions in a real browser while

@@ -95,6 +95,7 @@ export async function pickSubjectTargets(files: string[]): Promise<({ x: number;
     { type: "image" as const, source: { type: "base64" as const, media_type: "image/jpeg" as const, data: fs.readFileSync(f).toString("base64") } },
   ]);
   const { thumbnails } = await generateStructured({
+    label: "thumb-arrow",
     schema: SubjectSchema,
     model: PICK_MODEL,
     maxTokens: 1500,

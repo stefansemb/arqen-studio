@@ -44,6 +44,7 @@ export async function suggestStories(count: number): Promise<{ suggestions: Stor
     .map((p) => p.title)
     .filter(Boolean);
   const { picks } = await generateStructured({
+    label: "autopilot",
     schema: PickSchema,
     effort: "medium",
     system: `You are the editor of an English YouTube channel about AI news and building with AI.
