@@ -14,6 +14,8 @@ export interface DocAvatarProps {
   variant: "monogram" | "seal";
   channel: string;
   theme?: ThemeOverrides;
+  /** Monogram: the rule through the letters (default on). */
+  strike?: boolean;
 }
 
 export interface DocBannerProps {
@@ -40,7 +42,7 @@ const initials = (name: string) =>
 const gold = (accent: string, accent2: string, deep: string) =>
   `linear-gradient(175deg, ${accent2} 0%, ${accent} 38%, ${deep} 62%, ${accent} 78%, ${accent2} 100%)`;
 
-export const DocAvatar: React.FC<DocAvatarProps> = ({ variant, channel, theme: overrides }) => {
+export const DocAvatar: React.FC<DocAvatarProps> = ({ variant, channel, theme: overrides, strike = true }) => {
   const t = resolveTheme(overrides);
   const letters = initials(channel);
   const leaf: React.CSSProperties = {
@@ -87,7 +89,7 @@ export const DocAvatar: React.FC<DocAvatarProps> = ({ variant, channel, theme: o
           {ring(70, 2, 0.7)}
           <div style={{ ...leaf, fontSize: 340, fontWeight: 700, letterSpacing: -10, lineHeight: 1, marginTop: 20 }}>{letters}</div>
           {/* A thin rule through the monogram: the legend "undone". */}
-          <div
+          {strike && <div
             style={{
               position: "absolute",
               left: 170,
@@ -98,7 +100,7 @@ export const DocAvatar: React.FC<DocAvatarProps> = ({ variant, channel, theme: o
               transform: "rotate(-14deg)",
               boxShadow: `0 0 0 6px ${t.bg}`,
             }}
-          />
+          />}
         </>
       )}
     </AbsoluteFill>

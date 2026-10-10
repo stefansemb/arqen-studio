@@ -74,6 +74,29 @@ export const CHANNEL_PRESETS: Record<string, { label: string; profile: Omit<Chan
       imageSources: ["wikimedia", "met", "cleveland", "openverse", "pexels"],
     },
   },
+  gaming: {
+    label: "Gaming (WoW patch news)",
+    profile: {
+      // Night blue with WoW gold and the bright yellow that gaming thumbnails use for big text.
+      theme: {
+        bg: "#070b16",
+        bg2: "#101a33",
+        panel: "#0d1528",
+        text: "#f4f6fb",
+        muted: "#9aa6c2",
+        accent: "#ffcc00",
+        accent2: "#f5a623",
+        accentDeep: "#3a2a05",
+        font: "'Arial Black', 'Segoe UI', sans-serif",
+      },
+      // Presenter folder holds cut-outs of the in-game character for thumbnails.
+      presenter: true,
+      templates: ["wow-patch", "tutorial"],
+      defaultDurationMin: 12,
+      maxDurationMin: 30,
+      imageSources: ["pexels"],
+    },
+  },
   blank: {
     label: "Blank (original look)",
     profile: { theme: {}, presenter: false, templates: ["ai-news"], defaultDurationMin: 4, maxDurationMin: 30, imageSources: ["pexels"] },

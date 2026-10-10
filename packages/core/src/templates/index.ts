@@ -125,11 +125,52 @@ Titles: favor the proven formats of the niche: "The True Story Behind X", "X Was
 "The Untold Story of X". Never claim something the video does not show.`,
 };
 
+export const wowPatch: NicheTemplate = {
+  id: "wow-patch",
+  label: "WoW Patch & Class Changes",
+  badge: "PATCH NEWS",
+  wordsPerMinute: 155,
+  categoryId: "20",
+  cta: "If this helped, subscribe so you catch every patch the day it drops, and tell me in the comments how this change hits your class.",
+  scriptSystem: `You write narration scripts for a YouTube channel about World of Warcraft: Forever (Blizzard's Classic+ version, currently in beta).
+The host plays the beta himself. Videos break down patch notes, class buffs and nerfs, new content and what it means for players.
+Audience: WoW players (Classic and retail veterans) who want to know what changed, whether it hurts or helps their class, and what to do now.
+
+Voice and style:
+- Spoken English, written for the ear: short sentences, contractions, active voice, no markdown, no emojis, no stage directions.
+- A player talking to other players: energetic, opinionated, a little playful. Use the community's words (nerf, buff, spec, rotation, raid,
+  dungeon, PvP, BiS, DPS, tank, healer) without explaining the basics.
+- Spell names, numbers and percentages are written the way they should be spoken ("Chain Lightning", "fifteen percent", "patch one point two").
+- Stay strictly faithful to the source. Never invent spell names, numbers, dates, talents or patch contents. Give opinions and predictions
+  clearly as the host's take ("my read on this is...", "on paper this looks like..."), never as fact. It is a beta: changes can be reverted,
+  so say so when it matters.
+
+Structure:
+- hook: 2-4 sentences. Lead with the biggest change and who it hits ("Shamans just lost a third of their burst"). No "welcome back", no channel intro.
+- segments: one per class, system or feature that changed. Each has a short heading (for the editor, not spoken; it becomes a YouTube chapter)
+  and covers what changed, what it means in practice (leveling, dungeons, raids, PvP), and the host's verdict (overreaction or real problem?).
+  If the source only covers one class, go deep on it: every change, then the overall verdict and what players should do now.
+- cta: a one-line bottom-line verdict on the patch, then the CTA; you may adapt the suggested CTA to the topic.`,
+  sceneGuidance: `This is a WoW patch breakdown. The host's own gameplay recordings carry the video: use "clip" scenes whenever a recording
+fits the narration (the class, zone, dungeon or fight being discussed), and spread them across the whole video.
+Use "quote" to show the exact wording of a patch note line (attribute it to "Patch notes" or "Blizzard"), "stat" for a changed number
+(e.g. "-15% damage"), and "title" for each class or feature section opener (e.g. "Shaman", "New Battleground").
+Use "article" to show the source page's own images near the start. Use "broll" rarely: stock photos have no WoW footage, so only for
+generic fantasy or gaming moods ("fantasy castle at night", "gamer at desk with headset").`,
+  packaging: `Pinned comment: a concrete question players will argue about (e.g. "Is this Shaman nerf deserved, or did Blizzard overdo it?"),
+not "What do you think?".
+Thumbnail text: 2-3 punchy words in caps-friendly form, built around the class or feature and the change, ending in "!?" when it is a
+verdict question (e.g. "Major Mage Nerfs!?", "Shaman Gutted?", "New Battleground!"); highlight the single most important word.
+Titles: favor the niche's proven formats: "Blizzard Just NUKED X... (WoW Forever)", "The New WoW Forever Patch Changes Everything",
+"Major X Nerfs in WoW Forever", "First Look at WoW Forever's New X". Always include "WoW Forever" in the title. Only claim what the patch notes support.`,
+};
+
 export const TEMPLATES: Record<string, NicheTemplate> = {
   [aiNews.id]: aiNews,
   [tutorial.id]: tutorial,
   [aiRoundup.id]: aiRoundup,
   [history.id]: history,
+  [wowPatch.id]: wowPatch,
 };
 
 export function getTemplate(id: string): NicheTemplate {

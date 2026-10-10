@@ -282,6 +282,7 @@ export const CATEGORIES: Record<string, string> = {
   "25": "News & Politics",
   "22": "People & Blogs",
   "24": "Entertainment",
+  "20": "Gaming",
 };
 
 /** The videos.insert request body, built from the Publish tab data. Pure, so it can be tested. */
