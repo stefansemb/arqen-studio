@@ -165,12 +165,59 @@ Titles: favor the niche's proven formats: "Blizzard Just NUKED X... (WoW Forever
 "Major X Nerfs in WoW Forever", "First Look at WoW Forever's New X". Always include "WoW Forever" in the title. Only claim what the patch notes support.`,
 };
 
+export const wowGuide: NicheTemplate = {
+  id: "wow-guide",
+  label: "WoW Guide & Tier List",
+  badge: "GUIDE",
+  // A touch slower than news: viewers follow along and pause.
+  wordsPerMinute: 145,
+  categoryId: "20",
+  cta: "If this guide helped, save it for launch day, subscribe for more WoW Forever guides, and tell me in the comments which class or tier list you want next.",
+  scriptSystem: `You write narration scripts for in-depth guide videos on a YouTube channel about World of Warcraft: Forever (Blizzard's Classic+ version).
+The host has played the beta on several characters and classes. Formats: class tier lists (DPS, healer, tank, leveling), class and spec guides
+(leveling 1-60, talents, rotation, gear, professions), "which class should you play" deep dives, and system guides (pets, dungeons, PvP).
+Audience: WoW players deciding what to play or wanting to play their class well. Many will pause, rewatch and come back on launch day,
+so the video must work as a reference, not just as entertainment.
+
+Voice and style:
+- Spoken English, written for the ear: short sentences, contractions, active voice, no markdown, no emojis, no stage directions.
+- An experienced player who has done the testing: confident, practical, honest about trade-offs. Use the community's words (spec, rotation,
+  talents, BiS, cooldowns, AoE, threat, mana, downtime, solo, group) without explaining the basics.
+- Spell names, numbers and levels are written the way they should be spoken ("level forty", "Mortal Strike", "twenty percent").
+- Stay strictly faithful to the source and the host's notes. Never invent spell names, talents, numbers, drop locations or patch details.
+  Rankings and recommendations are the host's judgment: give the reason for every placement or pick ("it's A tier because...").
+  When the host's notes describe their own beta experience, use it in first person ("when I leveled my Shaman, the thirties were rough because...").
+  It is a beta: say when something may change before launch.
+
+Structure:
+- hook: 3-5 sentences. State the question the video answers and tease the most surprising answer ("one healer is miles ahead, and it's not the one you think").
+  No "welcome back", no channel intro.
+- segments: clear chapters with short headings (for the editor, not spoken; they become YouTube chapters a viewer can jump to).
+  Tier list: briefly how you ranked (what matters: leveling speed, group demand, solo ability, gear dependency), then tier by tier from top
+  to bottom, each pick with its reasons and who it suits. Class guide: overview and who it's for, then leveling phases by level range,
+  talents, rotation and priorities, gear and weapons, professions, common mistakes, and endgame outlook.
+  Recap the key points at the end of long chapters so a viewer who skipped ahead still gets them.
+- cta: a one-line summary of the main recommendation, then the CTA; you may adapt the suggested CTA to the topic.`,
+  sceneGuidance: `This is a long WoW guide. The host's own gameplay recordings carry the video: use "clip" scenes wherever a recording fits
+(the class, spec, zone or fight being discussed), and spread them across the whole video.
+Use "title" for every chapter opener and for each tier in a tier list (e.g. "S Tier", "Leveling 20-40", "Talents"), "stat" for a key number
+(e.g. "Level 40: mount", "+15% DPS"), and "quote" sparingly for an exact tooltip or patch note line.
+Use "article" to show the source page's own images where they illustrate the point. Use "broll" rarely: stock photos have no WoW footage,
+so only for generic fantasy or gaming moods.`,
+  packaging: `Pinned comment: a concrete question players will answer with their own pick (e.g. "Which healer are you maining at launch?"), not "What do you think?".
+Thumbnail text: 2-4 words that name the guide, with the class or role first (e.g. "Healer Tier List", "Warrior Leveling 1-60", "Which Tank?");
+highlight the single most important word.
+Titles: favor the niche's proven formats: "WoW Forever X Tier List: ULTIMATE PvE Deep Dive", "WoW Forever: 1-60 X Leveling Guide (Talents, Rotation, Tips)",
+"What X Should You Play in WoW Forever?", "The ULTIMATE X Guide for WoW Forever". Always include "WoW Forever". Only promise what the video covers.`,
+};
+
 export const TEMPLATES: Record<string, NicheTemplate> = {
   [aiNews.id]: aiNews,
   [tutorial.id]: tutorial,
   [aiRoundup.id]: aiRoundup,
   [history.id]: history,
   [wowPatch.id]: wowPatch,
+  [wowGuide.id]: wowGuide,
 };
 
 export function getTemplate(id: string): NicheTemplate {

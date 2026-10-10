@@ -91,8 +91,8 @@ export const CHANNEL_PRESETS: Record<string, { label: string; profile: Omit<Chan
       },
       // Presenter folder holds cut-outs of the in-game character for thumbnails.
       presenter: true,
-      templates: ["wow-patch", "tutorial"],
-      defaultDurationMin: 12,
+      templates: ["wow-guide", "wow-patch", "tutorial"],
+      defaultDurationMin: 25,
       maxDurationMin: 30,
       imageSources: ["pexels"],
     },
