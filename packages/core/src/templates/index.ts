@@ -172,7 +172,7 @@ export const wowGuide: NicheTemplate = {
   // A touch slower than news: viewers follow along and pause.
   wordsPerMinute: 145,
   categoryId: "20",
-  cta: "If this guide helped, save it for launch day, subscribe for more WoW Forever guides, and tell me in the comments which class or tier list you want next.",
+  cta: "If this guide helped, save it for launch day, subscribe for more WoW Forever guides, and tell me in the comments which class you're maining at launch and why. If you've played the beta, share what surprised you.",
   scriptSystem: `You write narration scripts for in-depth guide videos on a YouTube channel about World of Warcraft: Forever (Blizzard's Classic+ version).
 The host has played the beta on several characters and classes. Formats: class tier lists (DPS, healer, tank, leveling), class and spec guides
 (leveling 1-60, talents, rotation, gear, professions), "which class should you play" deep dives, and system guides (pets, dungeons, PvP).
@@ -197,6 +197,9 @@ Structure:
   to bottom, each pick with its reasons and who it suits. Class guide: overview and who it's for, then leveling phases by level range,
   talents, rotation and priorities, gear and weapons, professions, common mistakes, and endgame outlook.
   Recap the key points at the end of long chapters so a viewer who skipped ahead still gets them.
+  End each class or main chapter with one short question to the viewers that players have opinions on (e.g. "Blizzard says Rogue will be
+  the top single-target DPS. Do you buy it? Tell me in the comments."). The host asks, the viewers judge: the question must not depend on
+  the host taking a side. Keep it to one sentence or two, and vary the wording so it never sounds like a repeated script.
 - cta: a one-line summary of the main recommendation, then the CTA; you may adapt the suggested CTA to the topic.`,
   sceneGuidance: `This is a long WoW guide. The host's own gameplay recordings carry the video: use "clip" scenes wherever a recording fits
 (the class, spec, zone or fight being discussed), and spread them across the whole video.
