@@ -9,7 +9,9 @@ import {
   refreshXp,
   requeueStaleJobs,
   runPipeline,
+  runGameWatch,
   runWatcher,
+  GAME_WATCH_INTERVAL_MIN,
   telegramStatus,
 } from "@yta/core";
 import { readAppSettings } from "@yta/core/settings";
@@ -40,6 +42,17 @@ async function watchLoop() {
   }
 }
 void watchLoop();
+
+/** Light news watch for gaming channels (no AI, Telegram only); each channel turns it on with its own watcher setting. */
+async function gameWatchLoop() {
+  await new Promise((r) => setTimeout(r, 30_000));
+  while (!stopping) {
+    await runGameWatch({ log: (m) => console.log(m) }).catch((err) => console.error("Game watch:", (err as Error).message));
+    const until = Date.now() + GAME_WATCH_INTERVAL_MIN * 60_000;
+    while (!stopping && Date.now() < until) await new Promise((r) => setTimeout(r, 5_000));
+  }
+}
+void gameWatchLoop();
 
 /** Telegram button presses (Stop) arrive by long polling, so the app needn't be reachable from outside. */
 async function telegramLoop() {

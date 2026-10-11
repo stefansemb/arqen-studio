@@ -7,5 +7,6 @@ export { buildVideoProps } from "./props";
 export { createScriptProject } from "./fromScript";
 export { postDueComments } from "./comment";
 export { advanceAutopilot, handleTelegramButton, runWatcher } from "./watcher";
+export { GAME_WATCH_INTERVAL_MIN, runGameWatch } from "./gameWatch";
 export { notify, pollTelegram, telegramStatus } from "./telegram";
 export { refreshXp } from "./xp";
