@@ -137,10 +137,13 @@ export const DocBanner: React.FC<DocBannerProps> = ({ channel, tagline, topics, 
           )}
         </>
       ) : null}
-      {/* Darken the middle band so the text reads on any painting, and vignette the edges. */}
+      {/* Darken behind the text so it reads on any picture, and vignette the edges. A full-color picture only
+          gets a soft pool behind the text: desktop shows just the middle band, and the scene should show there. */}
       <AbsoluteFill
         style={{
-          background: `linear-gradient(180deg, transparent 22%, ${t.bg}d9 40%, ${t.bg}d9 60%, transparent 78%), radial-gradient(ellipse at center, transparent 40%, ${t.bg} 100%)`,
+          background: tint
+            ? `linear-gradient(180deg, transparent 22%, ${t.bg}d9 40%, ${t.bg}d9 60%, transparent 78%), radial-gradient(ellipse at center, transparent 40%, ${t.bg} 100%)`
+            : `radial-gradient(ellipse 36% 22% at center, ${t.bg}e6 0%, ${t.bg}b3 55%, transparent 100%), radial-gradient(ellipse at center, transparent 55%, ${t.bg}cc 100%)`,
         }}
       />
       <div
