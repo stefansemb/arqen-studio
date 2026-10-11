@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GAME_WATCHES, pickBigStories, storyKey } from "../src/gameWatch";
+import { GAME_WATCHES, pickBigStories, pickCreatorVideos, storyKey } from "../src/gameWatch";
 import type { NewsItem } from "../src/news";
 
 const wow = GAME_WATCHES["WoW Forever"];
@@ -31,8 +31,39 @@ describe("pickBigStories", () => {
     ]);
   });
 
+  it("needs WoW or Warcraft next to Forever, and counts every press story about the game", () => {
+    const press = (title: string, url: string) => ({ ...item(title, url), source: "PC Gamer" });
+    const picked = pickBigStories(
+      [
+        press("The advent of first-person shooters ... changed copyright forever", "https://www.pcgamer.com/games/fps/copyright/"),
+        press("WoW: Forever dev says 'there's a real longing for that slower pace'", "https://www.pcgamer.com/games/world-of-warcraft/forever-pace/"),
+      ],
+      wow,
+      new Set(),
+    );
+    expect(picked.map((s) => s.title)).toEqual(["WoW: Forever dev says 'there's a real longing for that slower pace'"]);
+  });
+
   it("skips stories already seen", () => {
     const dev = item("WoW Forever Beta Development Notes", "https://us.forums.blizzard.com/en/wow/t/dev-notes/1/9");
     expect(pickBigStories([dev], wow, new Set([storyKey(dev.url)]))).toEqual([]);
+  });
+});
+
+describe("pickCreatorVideos", () => {
+  it("keeps new game videos newest first and leaves out live streams and other topics", () => {
+    const v = (title: string, published: string) => ({ ...item(title, `https://youtube.com/watch?v=${published}`, published), source: "Creator" });
+    const picked = pickCreatorVideos(
+      [
+        v("Blizzard's Future Plans For Players Is Bigger Than We Expected", "2026-10-11T15:00:00Z"),
+        v("🔴LIVE | WoW Forever Show | Dev Updates", "2026-10-11T02:42:00Z"),
+        v("Blizzard Is Changing WoW Forever", "2026-10-10T15:00:00Z"),
+        v("My new keyboard setup", "2026-10-11T12:00:00Z"),
+        v("Old WoW video", "2026-10-09T10:00:00Z"),
+      ],
+      wow,
+      "2026-10-10T00:00:00Z",
+    );
+    expect(picked.map((p) => p.title)).toEqual(["Blizzard's Future Plans For Players Is Bigger Than We Expected", "Blizzard Is Changing WoW Forever"]);
   });
 });
