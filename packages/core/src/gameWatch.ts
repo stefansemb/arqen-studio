@@ -23,7 +23,8 @@ export interface GameWatch {
   /** Matching stories that are never worth a message (routine posts). */
   skip?: RegExp;
   /** YouTube channels the user follows: their game videos arrive as one digest a day, not as alerts. */
-  creators?: { name: string; channelId: string }[];
+  /** `all`: the channel only covers this game, so every upload counts (e.g. titles in another language). */
+  creators?: { name: string; channelId: string; all?: boolean }[];
   /** A creator video is about the game when its title matches (their titles rarely name the game). */
   creatorMatch?: RegExp;
   /** Local hour (0-23) after which the day's creator digest is sent. */
@@ -52,6 +53,8 @@ export const GAME_WATCHES: Record<string, GameWatch> = {
       { name: "Esfand", channelId: "UChX76aZbAkJBdQQ2iAm-GQg" },
       { name: "Marcelian&Flame", channelId: "UCyf0SCaSGhKpvI_azfvidUw" },
       { name: "WillE", channelId: "UC1haxYclmhXwa4FKFqYSaRw" },
+      // Swedish, WoW Forever only; small but far more views than subscribers.
+      { name: "JeLucN", channelId: "UCzgluRK8If0bkAKWDuVk4mQ", all: true },
     ],
     creatorMatch: /forever|\bwow\b|warcraft|blizzard|classic|azeroth|class|nerf|buff|dungeon|raid|beta/i,
     digestHour: 19,
@@ -81,8 +84,9 @@ export function pickBigStories(items: NewsItem[], watch: GameWatch, seen: Set<st
 /** Creator videos about the game published after `since`, newest first; live streams are left out. Pure. */
 export function pickCreatorVideos(items: NewsItem[], watch: GameWatch, since: string): NewsItem[] {
   const about = watch.creatorMatch ?? watch.match;
+  const everything = new Set((watch.creators ?? []).filter((c) => c.all).map((c) => c.name));
   return items
-    .filter((i) => i.published > since && about.test(i.title) && !/\blive\b|🔴/i.test(i.title))
+    .filter((i) => i.published > since && (everything.has(i.source) || about.test(i.title)) && !/\blive\b|🔴/i.test(i.title))
     .sort((a, b) => b.published.localeCompare(a.published));
 }
 

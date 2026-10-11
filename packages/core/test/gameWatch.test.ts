@@ -66,4 +66,9 @@ describe("pickCreatorVideos", () => {
     );
     expect(picked.map((p) => p.title)).toEqual(["Blizzard's Future Plans For Players Is Bigger Than We Expected", "Blizzard Is Changing WoW Forever"]);
   });
+
+  it("takes every upload from a creator marked all, whatever the title says", () => {
+    const sv = { ...item("RUSHA LEVEL 4", "https://youtube.com/watch?v=sv", "2026-10-11T10:00:00Z"), source: "JeLucN" };
+    expect(pickCreatorVideos([sv], wow, "2026-10-10T00:00:00Z").map((p) => p.title)).toEqual(["RUSHA LEVEL 4"]);
+  });
 });
