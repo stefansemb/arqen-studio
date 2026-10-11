@@ -27,6 +27,8 @@ export interface DocBannerProps {
   /** Absolute URL of a background painting; a plain backdrop when absent. */
   image?: string;
   theme?: ThemeOverrides;
+  /** Turn the background image into a gold-tinted old print (default on); off keeps its own colors. */
+  tint?: boolean;
 }
 
 /** Initials of the channel name: "Legend Undone" -> "LU". */
@@ -107,7 +109,7 @@ export const DocAvatar: React.FC<DocAvatarProps> = ({ variant, channel, theme: o
   );
 };
 
-export const DocBanner: React.FC<DocBannerProps> = ({ channel, tagline, topics, image, theme: overrides }) => {
+export const DocBanner: React.FC<DocBannerProps> = ({ channel, tagline, topics, image, theme: overrides, tint = true }) => {
   const t = resolveTheme(overrides);
   const rule = (
     <div style={{ display: "flex", alignItems: "center", gap: 22 }}>
@@ -122,10 +124,17 @@ export const DocBanner: React.FC<DocBannerProps> = ({ channel, tagline, topics, 
         <>
           <Img
             src={image}
-            style={{ width: "100%", height: "100%", objectFit: "cover", filter: "grayscale(1) contrast(1.15) brightness(0.55)" }}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              filter: tint ? "grayscale(1) contrast(1.15) brightness(0.55)" : "contrast(1.05) brightness(0.8)",
+            }}
           />
           {/* Re-tint the grey painting in the channel's golds: an old sepia print. */}
-          <AbsoluteFill style={{ background: `linear-gradient(160deg, ${t.accent} 0%, ${t.accentDeep} 60%, ${t.accent} 120%)`, mixBlendMode: "color" }} />
+          {tint && (
+            <AbsoluteFill style={{ background: `linear-gradient(160deg, ${t.accent} 0%, ${t.accentDeep} 60%, ${t.accent} 120%)`, mixBlendMode: "color" }} />
+          )}
         </>
       ) : null}
       {/* Darken the middle band so the text reads on any painting, and vignette the edges. */}

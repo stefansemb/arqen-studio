@@ -5,6 +5,7 @@ import { Thumbnail, THUMB_HEIGHT, THUMB_WIDTH, type ThumbnailProps } from "./Thu
 import { ShortVideo, SHORT_HEIGHT, SHORT_WIDTH, type ShortVideoProps } from "./ShortVideo";
 import { BANNER, ChannelAvatar, ChannelBanner, type AvatarProps, type BannerProps } from "./ChannelArt";
 import { DocAvatar, DocBanner, type DocAvatarProps, type DocBannerProps } from "./DocumentaryArt";
+import { GameThumbnail, type GameThumbnailProps } from "./GameThumbnail";
 import { FPS, HEIGHT, WIDTH, totalSeconds, type NewsVideoProps } from "./types";
 
 const defaultProps: NewsVideoProps = {
@@ -47,6 +48,17 @@ export const RemotionRoot: React.FC = () => (
     height={THUMB_HEIGHT}
     durationInFrames={1}
     defaultProps={thumbnailDefaults}
+  />
+  <Composition
+    id="GameThumbnail"
+    component={GameThumbnail}
+    fps={1}
+    width={THUMB_WIDTH}
+    height={THUMB_HEIGHT}
+    durationInFrames={1}
+    defaultProps={
+      { image: "", imageWidth: 1920, imageHeight: 1080, focusX: 0.5, focusY: 0.35, lines: ["Major Mage", "Nerfs!?"], label: "WoW Forever" } satisfies GameThumbnailProps
+    }
   />
   <Composition
     id="ShortVideo"

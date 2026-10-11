@@ -7,3 +7,4 @@ export { ShortVideo, SHORT_WIDTH, SHORT_HEIGHT, type ShortVideoProps } from "./S
 export { defaultTheme, type Theme, type ThemeOverrides } from "./theme";
 export { DocAvatar, DocBanner, type DocAvatarProps, type DocBannerProps } from "./DocumentaryArt";
 export { findBrand, type Brand } from "./brands";
+export { GameThumbnail, gameCrop, type GameThumbnailProps } from "./GameThumbnail";
