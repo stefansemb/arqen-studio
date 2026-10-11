@@ -137,6 +137,8 @@ ${article.text}
     schema: ScriptSchema,
     system: template.scriptSystem,
     effort: "high",
+    // Long videos (25 min is ~3,600 words) plus thinking overran the default 32k: a guide hit the cap.
+    ...(words > 2000 ? { maxTokens: 64000 } : {}),
     prompt,
   });
   // The model sometimes emits a heading with no text; it would become an empty chapter.
