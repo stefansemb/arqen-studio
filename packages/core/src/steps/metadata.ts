@@ -12,6 +12,7 @@ import { readAppSettings } from "../settings";
 import type { Article, PlannedScene, Script, Timings } from "../types";
 import { readPublish } from "../publishStore";
 import { freshLead, listGestures, recentGestures } from "../presenter";
+import { listCharacters } from "../characters";
 
 const MetadataSchema = z.object({
   titles: z.array(z.string()).describe("5 title options, best first"),
@@ -66,8 +67,11 @@ export async function generateMetadata(ctx: StepContext): Promise<void> {
   const channel = channelName();
   const scenesFile = path.join(ctx.dir, "scenes.json");
   const scenes = fs.existsSync(scenesFile) ? (JSON.parse(fs.readFileSync(scenesFile, "utf8")) as PlannedScene[]) : [];
-  const gestures = listGestures();
+  // Gaming templates show an in-game character instead of the presenter; Claude picks one by name the same way.
+  const game = Boolean(template.gameThumbnail);
+  const gestures = game ? listCharacters().map((c) => c.name) : listGestures();
   const recent = gestures.length ? recentGestures(ctx.dir) : [];
+  const presenter = gestures.length > 0 && !game;
   ctx.log("Writing title options, description, tags and thumbnail text");
 
   const m = await generateStructured({
@@ -83,7 +87,16 @@ ${template.packaging ?? DEFAULT_PACKAGING}
 Launch: fill in launch whenever the story is a new AI model, product, agent or feature that is released, previewed or leaked,
 even when the video is about what it does. A brand card (the company's logo and colors, the kicker and the product name) is
 then shown second, after your first thumbnail text.${
-      gestures.length
+      game && gestures.length
+        ? `\nThumbnail character: each thumbnail shows one in-game character. Put its name in the gesture field. Names are race-class
+("undead-rogue", "troll-mage"): pick the character whose class the thumbnail is about; for a general topic pick the class the
+video leads with or the most eye-catching one. Use a different character for each option when the video covers several classes.
+Thumbnail text is set on two short lines, so keep it to about 20 characters. Available: ${gestures.join(", ")}.${
+            recent.length ? `\nThe latest videos already used ${[...new Set(recent)].join(" and ")}; the first option should use a different character.` : ""
+          }`
+        : ""
+    }${
+      presenter
         ? `\nThumbnail gesture: the presenter stands on the right, next to the text. The FIRST option is the one used, and its gesture should be thinking unless another gesture clearly fits better: thinking suits most news, analysis, AI safety and legal twists.
 Gestures ending in "-serious" have a calm, closed-mouth face; the same gesture without it has a big smile. Prefer the
 serious ones for ordinary news, and keep the smiling ones for clearly good, fun or exciting news.
@@ -120,7 +133,8 @@ ${script.hook ? `Hook: ${script.hook}\n` : ""}${script.cta ? `CTA: ${script.cta}
   const previous = readPublish(ctx.dir);
   // The model leans on thinking; never let the used thumbnail repeat the last videos' face.
   // A launch puts the brand card second, after the presenter, and keeps the first two texts.
-  const brand = m.launch.company.trim() && m.launch.product.trim() ? m.launch : null;
+  // The brand card is for AI company launches; gaming thumbnails always show a character.
+  const brand = !game && m.launch.company.trim() && m.launch.product.trim() ? m.launch : null;
   const photoTexts = m.thumbnailTexts.slice(0, brand ? 2 : 3);
   const leadGestures = freshLead(
     photoTexts.map((t) => (gestures.includes(t.gesture.trim()) ? t.gesture.trim() : undefined)),
@@ -152,8 +166,8 @@ ${script.hook ? `Hook: ${script.hook}\n` : ""}${script.cta ? `CTA: ${script.cta}
         text: stripDashes(t.text, " "),
         highlight: t.highlight.trim(),
         ...(leadGestures[i] ? { gesture: leadGestures[i] } : {}),
-        ...(gestures.length && t.launch ? { launch: true } : {}),
-        ...(gestures.length && t.bubble.trim() && !t.launch
+        ...(presenter && t.launch ? { launch: true } : {}),
+        ...(presenter && t.bubble.trim() && !t.launch
           ? { bubble: { text: stripDashes(t.bubble, " ").slice(0, 24), ...(t.bubbleCross ? { cross: true } : {}) } }
           : {}),
       }))

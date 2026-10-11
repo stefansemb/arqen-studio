@@ -3,7 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import type { AddressInfo } from "node:net";
 import { renderStill, selectComposition } from "@remotion/renderer";
-import type { ThumbnailProps } from "@yta/video";
+import type { GameThumbnailProps, ThumbnailProps } from "@yta/video";
+import { charactersDir, listCharacters, pngSize, twoLines } from "../characters";
 import { readJson, writeJson, type StepContext } from "../context";
 import { channelName, getChannel } from "../channels";
 import { extractFrame } from "../providers/ffmpeg";
@@ -88,10 +89,61 @@ async function pickBackgrounds(ctx: StepContext): Promise<string[]> {
   return out;
 }
 
+/** Gaming thumbnails: each variant shows the in-game character Claude picked, with the text on two lines. */
+async function renderGameThumbnails(ctx: StepContext, label: string): Promise<void> {
+  const publish = readPublish(ctx.dir)!;
+  const characters = listCharacters();
+  if (!characters.length) {
+    throw new Error(`No characters for gaming thumbnails yet. Add screenshots and characters.json to ${charactersDir()}.`);
+  }
+  const names = characters.map((c) => c.name);
+  ctx.log(`Rendering ${VARIANTS} gaming thumbnails from ${characters.length} character(s)`);
+  const server = await serveDir(ctx.dir);
+  try {
+    const { port } = server.address() as AddressInfo;
+    const serveUrl = await getBundle();
+    const variants: ThumbnailVariant[] = [];
+    for (let i = 0; i < VARIANTS; i++) {
+      const text = publish.thumbnailTexts[i % publish.thumbnailTexts.length];
+      const character = characters.find((c) => c.name === pickGesture(text.gesture, i, names))!;
+      // Copied into the project so the render server (which serves only the project dir) can reach it.
+      const background = `thumbs/character-${i}.png`;
+      fs.copyFileSync(path.join(charactersDir(), character.file), path.join(ctx.dir, background));
+      const size = pngSize(path.join(ctx.dir, background));
+      const inputProps: GameThumbnailProps = {
+        image: `http://127.0.0.1:${port}/${background}`,
+        imageWidth: size.width,
+        imageHeight: size.height,
+        focusX: character.focusX,
+        focusY: character.focusY,
+        ...(character.zoom ? { zoom: character.zoom } : {}),
+        ...(character.trimTop ? { trimTop: character.trimTop } : {}),
+        lines: twoLines(text.text),
+        label,
+        theme: getChannel().theme,
+      };
+      const file = `thumbs/thumb-${i}.jpg`;
+      const composition = await selectComposition({ serveUrl, id: "GameThumbnail", inputProps });
+      await renderStill({ composition, serveUrl, inputProps, output: path.join(ctx.dir, file), imageFormat: "jpeg", jpegQuality: 92 });
+      variants.push({ ...text, gesture: character.name, file, background, layout: "full" });
+    }
+    writeJson(ctx, "publish.json", {
+      ...publish,
+      thumbnails: variants,
+      selectedThumbnail: Math.min(publish.selectedThumbnail, variants.length - 1),
+    });
+    ctx.log(`Rendered ${variants.length} thumbnails (1280x720): ${variants.map((v) => v.gesture).join(", ")}`);
+  } finally {
+    server.close();
+  }
+}
+
 export async function renderThumbnails(ctx: StepContext): Promise<void> {
   const publish = readPublish(ctx.dir);
   if (!publish?.thumbnailTexts.length) throw new Error("No thumbnail text yet. Run \"Title & description\" first.");
   fs.mkdirSync(path.join(ctx.dir, "thumbs"), { recursive: true });
+  const game = getTemplate(ctx.project.niche).gameThumbnail;
+  if (game) return renderGameThumbnails(ctx, game.label);
 
   const backgrounds = await pickBackgrounds(ctx);
   const badge = getTemplate(ctx.project.niche).badge;

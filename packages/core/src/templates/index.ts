@@ -19,6 +19,11 @@ export interface NicheTemplate {
   articleScenes?: boolean;
   /** Replaces the default (AI news) guidance for pinned comments and thumbnail text in the packaging step. */
   packaging?: string;
+  /**
+   * Gaming thumbnails: an in-game character screenshot (see characters.ts) with two big lines of text,
+   * instead of the presenter layout. `label` is the small game name at the top left.
+   */
+  gameThumbnail?: { label: string };
 }
 
 export const aiNews: NicheTemplate = {
@@ -129,6 +134,7 @@ export const wowPatch: NicheTemplate = {
   id: "wow-patch",
   label: "WoW Patch & Class Changes",
   badge: "PATCH NEWS",
+  gameThumbnail: { label: "WoW Forever" },
   wordsPerMinute: 155,
   categoryId: "20",
   cta: "If this helped, subscribe so you catch every patch the day it drops, and tell me in the comments how this change hits your class.",
@@ -169,6 +175,7 @@ export const wowGuide: NicheTemplate = {
   id: "wow-guide",
   label: "WoW Guide & Tier List",
   badge: "GUIDE",
+  gameThumbnail: { label: "WoW Forever" },
   // A touch slower than news: viewers follow along and pause.
   wordsPerMinute: 145,
   categoryId: "20",

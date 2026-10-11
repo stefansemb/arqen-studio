@@ -89,8 +89,8 @@ export const CHANNEL_PRESETS: Record<string, { label: string; profile: Omit<Chan
         accentDeep: "#3a2a05",
         font: "'Arial Black', 'Segoe UI', sans-serif",
       },
-      // Presenter folder holds cut-outs of the in-game character for thumbnails.
-      presenter: true,
+      // Thumbnails use in-game character screenshots (channel/characters, see characters.ts), not a presenter.
+      presenter: false,
       templates: ["wow-guide", "wow-patch", "tutorial"],
       defaultDurationMin: 25,
       maxDurationMin: 30,
