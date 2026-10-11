@@ -55,6 +55,11 @@ function withCamera(video: Omit<VideoInfo, "camera">, camera: ClipInfo["camera"]
 /** Silence before the voice in rendered videos, so the first word isn't clipped on playback. */
 export const NARRATION_LEAD_IN_SEC = 0.3;
 
+/** Where the narration starts in the final video (intro bumper plus lead-in): chapters and captions shift by this. */
+export function narrationStartSec(app: { intro: { enabled: boolean; seconds: number } }): number {
+  return (app.intro.enabled ? app.intro.seconds : 0) + NARRATION_LEAD_IN_SEC;
+}
+
 export function buildVideoProps(projectId: string, baseUrl: string): NewsVideoProps | null {
   const dir = projectDir(projectId);
   const timings = readIfExists<Timings>(dir, "timings.json");

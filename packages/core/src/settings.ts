@@ -56,6 +56,11 @@ export interface AppSettings {
   pinnedComment: { enabled: boolean; subscribeUrl: string };
   /** Defaults for approving uploads from the Batch page. */
   uploadDefaults: { privacy: "private" | "unlisted" | "public" | "schedule"; scheduleTime: string; notifySubscribers: boolean };
+  /**
+   * On upload: English captions from the voiceover's timings, plus for each language (ISO code, e.g. "sv") a translated
+   * caption track and a translated title and description (see subtitles.ts).
+   */
+  subtitles: { enabled: boolean; languages: string[] };
 }
 
 export interface CreatorChannel {
@@ -107,6 +112,7 @@ export const DEFAULT_APP_SETTINGS: Omit<AppSettings, "voice"> = {
   thumbnailBox: true,
   thumbnailArrow: true,
   pinnedComment: { enabled: true, subscribeUrl: "" },
+  subtitles: { enabled: false, languages: [] },
 };
 
 /**
@@ -200,6 +206,14 @@ function sanitizePinnedComment(v: unknown): AppSettings["pinnedComment"] {
   return { enabled: typeof c.enabled === "boolean" ? c.enabled : d.enabled, subscribeUrl: !url || /^https?:\/\//.test(url) ? url : d.subscribeUrl };
 }
 
+function sanitizeSubtitles(v: unknown): AppSettings["subtitles"] {
+  const s = (v ?? {}) as Partial<AppSettings["subtitles"]>;
+  const languages = Array.isArray(s.languages)
+    ? [...new Set(s.languages.filter((l): l is string => typeof l === "string" && /^[a-z]{2}$/.test(l) && l !== "en"))].slice(0, 5)
+    : [];
+  return { enabled: typeof s.enabled === "boolean" ? s.enabled : false, languages };
+}
+
 /** Fills gaps with defaults and enforces YouTube's limits. */
 function sanitizeApp(raw: Partial<AppSettings>, channelId = DEFAULT_CHANNEL): AppSettings {
   const d = channelId === DEFAULT_CHANNEL ? DEFAULT_APP_SETTINGS : { ...DEFAULT_APP_SETTINGS, ...NEW_CHANNEL_SETTINGS };
@@ -224,6 +238,7 @@ function sanitizeApp(raw: Partial<AppSettings>, channelId = DEFAULT_CHANNEL): Ap
     pinnedComment: sanitizePinnedComment(raw.pinnedComment),
     thumbnailBox: typeof raw.thumbnailBox === "boolean" ? raw.thumbnailBox : d.thumbnailBox,
     thumbnailArrow: typeof raw.thumbnailArrow === "boolean" ? raw.thumbnailArrow : d.thumbnailArrow,
+    subtitles: sanitizeSubtitles(raw.subtitles),
   };
 }
 

@@ -286,9 +286,15 @@ export const CATEGORIES: Record<string, string> = {
 };
 
 /** The videos.insert request body, built from the Publish tab data. Pure, so it can be tested. */
-export function buildVideoResource(publish: Pick<PublishInfo, "title" | "description" | "tags">, opts: UploadOptions) {
+export function buildVideoResource(
+  publish: Pick<PublishInfo, "title" | "description" | "tags">,
+  opts: UploadOptions,
+  /** Translated titles and descriptions by language code ("sv"), shown to viewers in that language. */
+  localizations?: Record<string, { title: string; description: string }>,
+) {
   const scheduled = Boolean(opts.publishAt);
   return {
+    ...(localizations && Object.keys(localizations).length ? { localizations } : {}),
     snippet: {
       title: publish.title.slice(0, 100),
       description: publish.description.slice(0, 5000),
@@ -352,7 +358,7 @@ async function uploadOnce(opts: UploadOpts): Promise<{ id: string }> {
   const init = await sendWithAuth(
     opts.accessToken,
     (token) =>
-      fetch(`${apiBase()}/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status&notifySubscribers=${opts.notifySubscribers}`, {
+      fetch(`${apiBase()}/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status${"localizations" in opts.resource ? ",localizations" : ""}&notifySubscribers=${opts.notifySubscribers}`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -447,6 +453,34 @@ async function api(method: string, pathAndQuery: string, body?: unknown): Promis
       body: body ? JSON.stringify(body) : undefined,
     }),
   );
+}
+
+/**
+ * Adds a caption track (SRT) to a video. Needs the force-ssl scope, which the comment permission already asks for.
+ * Multipart upload: the track's metadata, then the file.
+ */
+export async function uploadCaption(videoId: string, language: string, name: string, srt: string): Promise<void> {
+  const boundary = `caption${Date.now().toString(36)}`;
+  const body = [
+    `--${boundary}`,
+    "Content-Type: application/json; charset=UTF-8",
+    "",
+    JSON.stringify({ snippet: { videoId, language, name, isDraft: false } }),
+    `--${boundary}`,
+    "Content-Type: application/x-subrip; charset=UTF-8",
+    "",
+    srt,
+    `--${boundary}--`,
+    "",
+  ].join("\r\n");
+  const res = await sendWithAuth(await getAccessToken(), (token) =>
+    fetch(`${apiBase()}/upload/youtube/v3/captions?uploadType=multipart&part=snippet`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": `multipart/related; boundary=${boundary}` },
+      body,
+    }),
+  );
+  if (!res.ok) throw await apiError(res, `Uploading the ${name} captions`);
 }
 
 /**

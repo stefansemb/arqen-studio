@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { NARRATION_LEAD_IN_SEC } from "../props";
+import { narrationStartSec } from "../props";
 import path from "node:path";
 import { z } from "zod";
 import { generateStructured } from "../llm";
@@ -123,7 +123,7 @@ ${script.hook ? `Hook: ${script.hook}\n` : ""}${script.cta ? `CTA: ${script.cta}
 
   // Chapter times refer to the final video, so shift by the intro and count the outro.
   const app = readAppSettings();
-  const intro = (app.intro.enabled ? app.intro.seconds : 0) + NARRATION_LEAD_IN_SEC;
+  const intro = narrationStartSec(app);
   const outro = app.outro.enabled ? app.outro.seconds : 0;
   const shifted = timings.words.map((w) => ({ ...w, start: w.start + intro, end: w.end + intro }));
   // The model still slips in dashes now and then; the channel style has none.

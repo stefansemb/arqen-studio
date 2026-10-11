@@ -32,6 +32,8 @@ export interface PublishInfo {
     thumbnailSet: boolean;
     playlist?: string;
     playlistId?: string;
+    /** Caption tracks added on upload, by language code ("en", "sv"). */
+    captions?: string[];
     /** The posted comment, or why posting failed (retried until it works). */
     comment?: { id?: string; postedAt?: string; error?: string };
     /** Last time a private upload's real privacy was looked up (it may have been made public in YouTube Studio). */

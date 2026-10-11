@@ -2,9 +2,57 @@ import fs from "node:fs";
 import path from "node:path";
 import { writeJson, type StepContext } from "../context";
 import { readPublish } from "../publishStore";
-import { addToPlaylist, buildVideoResource, connectionStatus, declareNoPaidPromotion, ensurePlaylist, getAccessToken, setThumbnail, uploadVideo, YouTubeError } from "../youtube";
+import { addToPlaylist, buildVideoResource, connectionStatus, declareNoPaidPromotion, ensurePlaylist, getAccessToken, setThumbnail, uploadCaption, uploadVideo, YouTubeError } from "../youtube";
 import { readAppSettings } from "../settings";
 import { commentDue, postProjectComment } from "../comment";
+import { channelName } from "../channels";
+import { getTemplate } from "../templates";
+import { narrationStartSec } from "../props";
+import { LANGUAGE_NAMES, toSentences, toSrt, translateMetadata, translateSentences } from "../subtitles";
+import type { Timings } from "../types";
+
+/**
+ * Uploads English captions from the voiceover's timings and a translated track per language. Files are kept in
+ * subtitles/ (translations are reused while the English is unchanged). Returns the languages that made it.
+ */
+async function uploadCaptions(ctx: StepContext, videoId: string, languages: string[], topic: string): Promise<string[]> {
+  const timingsFile = path.join(ctx.dir, "timings.json");
+  if (!fs.existsSync(timingsFile)) {
+    ctx.log("No captions: timings.json is missing.", "warn");
+    return [];
+  }
+  const timings = JSON.parse(fs.readFileSync(timingsFile, "utf8")) as Timings;
+  const sentences = toSentences(timings.words, narrationStartSec(readAppSettings()));
+  const dir = path.join(ctx.dir, "subtitles");
+  fs.mkdirSync(dir, { recursive: true });
+  const done: string[] = [];
+  const tracks: { lang: string; texts?: string[] }[] = [{ lang: "en" }];
+  for (const lang of languages) {
+    const cache = path.join(dir, `${lang}.json`);
+    const source = sentences.map((s) => s.text);
+    try {
+      const cached = fs.existsSync(cache) ? (JSON.parse(fs.readFileSync(cache, "utf8")) as { source: string[]; texts: string[] }) : null;
+      const texts = cached && cached.source.join("\n") === source.join("\n") ? cached.texts : await translateSentences(source, lang, topic);
+      fs.writeFileSync(cache, JSON.stringify({ source, texts }, null, 2));
+      tracks.push({ lang, texts });
+    } catch (err) {
+      ctx.log(`No ${LANGUAGE_NAMES[lang] ?? lang} captions: ${(err as Error).message}`, "warn");
+    }
+  }
+  for (const t of tracks) {
+    const name = LANGUAGE_NAMES[t.lang] ?? t.lang;
+    const srt = toSrt(sentences, t.texts);
+    fs.writeFileSync(path.join(dir, `${t.lang}.srt`), srt);
+    try {
+      await uploadCaption(videoId, t.lang, name, srt);
+      done.push(t.lang);
+      ctx.log(`${name} captions added`);
+    } catch (err) {
+      ctx.log(`${name} captions not added (subtitles/${t.lang}.srt can be uploaded in YouTube Studio): ${(err as Error).message}`, "warn");
+    }
+  }
+  return done;
+}
 
 /**
  * Uploads output.mp4 with the Publish tab's title, description, tags and thumbnail.
@@ -18,7 +66,20 @@ export async function uploadToYouTube(ctx: StepContext): Promise<void> {
   if (!fs.existsSync(video)) throw new Error("Render the video first.");
 
   const token = await getAccessToken();
-  const resource = buildVideoResource(publish, publish.upload);
+  const app = readAppSettings();
+  const languages = app.subtitles.enabled ? app.subtitles.languages : [];
+  const topic = `${channelName() || "a YouTube channel"}, ${getTemplate(ctx.project.niche).label} videos`;
+  // Translated title and description for each extra language; a failed translation never stops the upload.
+  const localizations: Record<string, { title: string; description: string }> = {};
+  for (const lang of languages) {
+    try {
+      localizations[lang] = await translateMetadata(publish.title, publish.description, lang, topic);
+      ctx.log(`Title and description translated to ${LANGUAGE_NAMES[lang] ?? lang}: "${localizations[lang].title}"`);
+    } catch (err) {
+      ctx.log(`No ${LANGUAGE_NAMES[lang] ?? lang} title and description: ${(err as Error).message}`, "warn");
+    }
+  }
+  const resource = buildVideoResource(publish, publish.upload, localizations);
   const mb = (fs.statSync(video).size / 1e6).toFixed(0);
   ctx.log(`Uploading ${mb} MB as "${resource.snippet.title}" (${resource.status.privacyStatus}${publish.upload.publishAt ? `, scheduled ${publish.upload.publishAt}` : ""})`);
 
@@ -60,6 +121,8 @@ export async function uploadToYouTube(ctx: StepContext): Promise<void> {
     }
   }
 
+  const captions = app.subtitles.enabled ? await uploadCaptions(ctx, id, languages, topic) : [];
+
   let playlist: string | undefined;
   let playlistId: string | undefined;
   const playlistTitle = readAppSettings().playlists[ctx.project.niche]?.trim();
@@ -90,6 +153,7 @@ export async function uploadToYouTube(ctx: StepContext): Promise<void> {
       thumbnailSet,
       playlist,
       playlistId,
+      ...(captions.length ? { captions } : {}),
     },
   });
 
