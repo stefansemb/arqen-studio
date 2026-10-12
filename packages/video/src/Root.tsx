@@ -6,6 +6,21 @@ import { ShortVideo, SHORT_HEIGHT, SHORT_WIDTH, type ShortVideoProps } from "./S
 import { BANNER, ChannelAvatar, ChannelBanner, type AvatarProps, type BannerProps } from "./ChannelArt";
 import { DocAvatar, DocBanner, type DocAvatarProps, type DocBannerProps } from "./DocumentaryArt";
 import { GameThumbnail, type GameThumbnailProps } from "./GameThumbnail";
+import { CensusShort, CENSUS_SHORT, type CensusShortProps } from "./CensusShort";
+
+const censusDefaults: CensusShortProps = {
+  iconBase: "https://www.forevercensus.com/icons",
+  realm: "Classic Beta PvE",
+  date: "Oct 12, 2026",
+  online: { alliance: 32800, horde: 37600 },
+  counted: 18403,
+  classes: [
+    { token: "HUNTER", name: "Hunter", color: "#AAD372", share: 15.1 },
+    { token: "WARRIOR", name: "Warrior", color: "#C69B6D", share: 14.6 },
+  ],
+  combos: [{ race: "Undead", raceIcon: "undead", className: "Paladin", classIcon: "paladin", share: 6.5, isNew: true }],
+  newShare: 34,
+};
 import { FPS, HEIGHT, WIDTH, totalSeconds, type NewsVideoProps } from "./types";
 
 const defaultProps: NewsVideoProps = {
@@ -105,6 +120,15 @@ export const RemotionRoot: React.FC = () => (
     height={BANNER.height}
     durationInFrames={1}
     defaultProps={{ channel: "My Channel", tagline: "The real stories behind the legends", topics: "Myths · Legends · The record" } satisfies DocBannerProps}
+  />
+  <Composition
+    id="CensusShort"
+    component={CensusShort}
+    fps={CENSUS_SHORT.fps}
+    width={CENSUS_SHORT.width}
+    height={CENSUS_SHORT.height}
+    durationInFrames={CENSUS_SHORT.durationInFrames}
+    defaultProps={censusDefaults}
   />
   </>
 );
