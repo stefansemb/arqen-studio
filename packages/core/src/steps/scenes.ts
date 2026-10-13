@@ -109,6 +109,8 @@ ${describeClips(clips)}`
     label: "scenes",
     schema: ScenesSchema,
     effort: "medium",
+    // A 25-minute video plans ~150 scenes; with thinking that outgrew the 32k default and the JSON was cut off.
+    maxTokens: 64000,
     system: `You are a video editor planning the visuals for a narrated YouTube video. Every moment of the narration needs a visual.
 Scene types:
 - clip: the user's own screen recording. Needs clip, clipStart, clipEnd. text = optional short step label (e.g. "Step 2: Pick a length"), or "".
