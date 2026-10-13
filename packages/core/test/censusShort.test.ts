@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { censusShortProps } from "../src/censusShort";
+import { CENSUS_SHORT_TITLE, censusShortDescription, censusShortProps } from "../src/censusShort";
 
 const census = {
   total: 1000,
@@ -46,6 +46,19 @@ describe("censusShortProps", () => {
   it("has no online estimate unless both factions have one", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ ...census, online: [{ faction: "Horde", n: 5 }] }))));
     expect((await censusShortProps("https://census.test")).online).toBeNull();
+  });
+
+  it("titles and describes the upload from the video's own numbers", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(census))));
+    const p = await censusShortProps("https://census.test");
+    // 70,400 online rounds down in the title, so it never overstates.
+    expect(CENSUS_SHORT_TITLE(p)).toBe("70,000 players in the WoW Forever beta: here's what they picked");
+    const d = censusShortDescription(p, "Footer line");
+    expect(d).toContain("About 70,400 players online at once");
+    expect(d).toContain("Top classes: Warrior 30.0%, Druid 20.0%");
+    expect(d).toContain("1. Skyborne Druid 11.0% (new in Forever)");
+    expect(d).toContain("https://www.forevercensus.com");
+    expect(d.indexOf("Footer line")).toBeLessThan(d.indexOf("#Shorts"));
   });
 
   it("refuses an empty census", async () => {

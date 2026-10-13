@@ -3,7 +3,9 @@ import path from "node:path";
 import type { AddressInfo } from "node:net";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import type { CensusShortProps } from "@yta/video";
+import { withChannel } from "./channels";
 import { getBundle, serveDir } from "./steps/render";
+import { buildVideoResource, declareNoPaidPromotion, getAccessToken, uploadVideo, type Privacy } from "./youtube";
 
 // Census Short for Arqen WoW: live numbers from the Forever Census (a separate project,
 // C:\AiProjects\Arqen Census) rendered into the CensusShort composition. No AI, no voice.
@@ -84,6 +86,96 @@ export async function censusShortProps(base = CENSUS_URL, realm = "Classic Beta 
   };
 }
 
+/** `<video>.json` next to a rendered Short: its numbers and, once uploaded, where it went. */
+interface Sidecar {
+  props: CensusShortProps;
+  youtube?: { videoId: string; url: string; privacy: string; publishAt?: string; uploadedAt: string };
+}
+const sidecarFile = (video: string) => `${video}.json`;
+function readSidecar(video: string): Sidecar | null {
+  try {
+    return JSON.parse(fs.readFileSync(sidecarFile(video), "utf8")) as Sidecar;
+  } catch {
+    return null;
+  }
+}
+function writeSidecar(video: string, data: Sidecar): void {
+  fs.writeFileSync(sidecarFile(video), JSON.stringify(data, null, 2));
+}
+
+export const CENSUS_SHORT_TITLE = (p: CensusShortProps) =>
+  p.online
+    ? `${fmtK(p.online.alliance + p.online.horde)} players in the WoW Forever beta: here's what they picked`
+    : `Who plays what in the WoW Forever beta`;
+
+/** "70,000" style: rounded down to whole thousands, so the title never overstates. */
+function fmtK(n: number): string {
+  return (Math.floor(n / 1000) * 1000).toLocaleString("en-US");
+}
+
+/** YouTube description from the Short's own numbers, the channel footer and hashtags. */
+export function censusShortDescription(p: CensusShortProps, footer = ""): string {
+  const online = p.online ? p.online.alliance + p.online.horde : 0;
+  const lines = [
+    online
+      ? `About ${(Math.round(online / 100) * 100).toLocaleString("en-US")} players online at once in the WoW Forever beta (${p.realm}, ${p.date}). Here's what they play.`
+      : `${p.counted.toLocaleString("en-US")} characters counted in the WoW Forever beta (${p.realm}, ${p.date}). Here's what they play.`,
+    `Top classes: ${p.classes.slice(0, 3).map((c) => `${c.name} ${c.share.toFixed(1)}%`).join(", ")}`,
+    `Top combos: ${p.combos.map((c, i) => `${i + 1}. ${c.race} ${c.className} ${c.share.toFixed(1)}%${c.isNew ? " (new in Forever)" : ""}`).join(", ")}`,
+    `${Math.round(p.newShare)}% play a race and class combo that didn't exist in 2004.`,
+    `Live numbers, and how to help count: https://www.forevercensus.com`,
+  ];
+  if (footer.trim()) lines.push(footer.trim());
+  lines.push("#Shorts #WoWForever #WorldofWarcraft");
+  return lines.join("\n\n").slice(0, 5000);
+}
+
+/**
+ * Uploads a rendered census Short to a channel (Arqen WoW by default) with Studio's normal
+ * YouTube upload. Refuses a file that is already uploaded unless `force`.
+ */
+export async function uploadCensusShort(opts: {
+  file: string;
+  privacy: Privacy;
+  publishAt?: string;
+  title?: string;
+  channel?: string;
+  force?: boolean;
+  log?: (msg: string) => void;
+}): Promise<NonNullable<Sidecar["youtube"]>> {
+  const log = opts.log ?? console.log;
+  const sidecar = readSidecar(opts.file);
+  if (!sidecar) throw new Error(`No ${path.basename(sidecarFile(opts.file))} next to the video. Render it with this tool first.`);
+  if (sidecar.youtube && !opts.force) throw new Error(`Already uploaded: ${sidecar.youtube.url} (use --force to upload again).`);
+  const channel = opts.channel ?? "arqen-wow";
+  return withChannel(channel, async () => {
+    const p = sidecar.props;
+    const title = `${(opts.title ?? CENSUS_SHORT_TITLE(p)).replace(/#shorts/gi, "").trim()} #Shorts`.slice(0, 100);
+    const resource = buildVideoResource(
+      {
+        title,
+        // No channel footer: it describes AI script and voice, which this Short has neither of.
+        description: censusShortDescription(p),
+        tags: ["WoW Forever", "World of Warcraft", "WoW Classic", "census", "classes", "Skyborne"],
+      },
+      { privacy: opts.privacy, publishAt: opts.publishAt, categoryId: "20", notifySubscribers: true, syntheticMedia: false },
+    );
+    log(`Uploading to ${channel}: "${title}" (${resource.status.privacyStatus}${opts.publishAt ? `, publishes ${opts.publishAt}` : ""})`);
+    const { id } = await uploadVideo({ file: opts.file, resource, notifySubscribers: true, accessToken: await getAccessToken() });
+    await declareNoPaidPromotion(id).catch((err) => log(`Paid promotion not declared: ${(err as Error).message}`));
+    const youtube = {
+      videoId: id,
+      url: `https://youtube.com/shorts/${id}`,
+      privacy: resource.status.privacyStatus,
+      publishAt: opts.publishAt,
+      uploadedAt: new Date().toISOString(),
+    };
+    writeSidecar(opts.file, { ...sidecar, youtube });
+    log(`Uploaded: ${youtube.url}`);
+    return youtube;
+  });
+}
+
 /** Renders the Short to `out`. `music` is an optional local audio file. */
 export async function renderCensusShort(opts: { out: string; music?: string; log?: (msg: string) => void }): Promise<CensusShortProps> {
   const log = opts.log ?? console.log;
@@ -111,6 +203,8 @@ export async function renderCensusShort(opts: { out: string; music?: string; log
       },
     });
     fs.renameSync(tmp, opts.out);
+    // The numbers behind this file, so the upload describes exactly what the video shows.
+    writeSidecar(opts.out, { props: { ...props, musicSrc: undefined } });
     log(`Rendered ${opts.out}`);
     return props;
   } finally {
