@@ -7,7 +7,9 @@ import { writeJson, type StepContext } from "../context";
 import { extractFrame, normalizeVideo, probeVideo, streamGrayFrames } from "../providers/ffmpeg";
 import { cameraAt } from "@yta/video/camera";
 import { ACTIVITY_SAMPLING, cameraPath, diffFrames, type ActivitySample } from "../zoom";
-import type { ClipInfo } from "../types";
+import type { Article, ClipInfo, Script } from "../types";
+import { getTemplate } from "../templates";
+import { cachedAnalysis, indexClipLibrary, linkFile, selectClips, type AnalyzedClip, type CachedClip } from "../clipLibrary";
 
 import { RAW_CLIPS_DIR, VIDEO_EXTENSIONS } from "../paths";
 
@@ -20,7 +22,7 @@ const DescriptionSchema = z.object({
     z.object({
       start: z.number().describe("Seconds"),
       end: z.number().describe("Seconds"),
-      description: z.string().describe("What is visible or happening on screen, concrete (buttons, pages, text)"),
+      description: z.string().describe("What is visible or happening on screen, concrete"),
     }),
   ),
 });
@@ -34,7 +36,8 @@ export function listRawClips(dir: string): string[] {
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
 
-async function describeClip(frames: { atSec: number; file: string }[], durationSec: number) {
+/** `game`: the game's name for gameplay recordings; otherwise a software tutorial screen recording. */
+async function describeClip(frames: { atSec: number; file: string }[], durationSec: number, game?: string) {
   const content: Anthropic.ContentBlockParam[] = [];
   for (const f of frames) {
     content.push({ type: "text", text: `Frame at ${f.atSec.toFixed(1)} s:` });
@@ -43,10 +46,17 @@ async function describeClip(frames: { atSec: number; file: string }[], durationS
       source: { type: "base64", media_type: "image/jpeg", data: fs.readFileSync(f.file).toString("base64") },
     });
   }
+  const d = durationSec.toFixed(1);
   content.push({
     type: "text",
-    text: `These frames come from a ${durationSec.toFixed(1)}-second silent screen recording made for a software tutorial.
-Describe what the recording shows as a timeline covering 0 to ${durationSec.toFixed(1)} s, split where the screen meaningfully changes
+    text: game
+      ? `These frames come from a ${d}-second gameplay recording of ${game} (World of Warcraft).
+Describe what the recording shows as a timeline covering 0 to ${d} s, split where the action meaningfully changes.
+For each part name the player character's class and race when visible, the zone or place, and what happens (fighting
+which enemy, casting which kind of spell, travelling, in a group, in a city or dungeon), so an editor can match each
+part to narration.`
+      : `These frames come from a ${d}-second silent screen recording made for a software tutorial.
+Describe what the recording shows as a timeline covering 0 to ${d} s, split where the screen meaningfully changes
 (new page, dialog, typed input, button click, result appearing). Name visible UI elements and text so an editor can match
 each part to narration.`,
   });
@@ -54,7 +64,7 @@ each part to narration.`,
     label: "clips",
     schema: DescriptionSchema,
     effort: "low",
-    system: "You are a video editor's assistant who logs screen recordings precisely.",
+    system: `You are a video editor's assistant who logs ${game ? "gameplay" : "screen"} recordings precisely.`,
     prompt: content,
   });
 }
@@ -75,70 +85,130 @@ export async function computeActivity(file: string): Promise<ActivitySample[]> {
   );
 }
 
-export async function analyzeClips(ctx: StepContext): Promise<void> {
-  const files = listRawClips(ctx.dir);
-  if (!files.length) {
-    ctx.log("No clips uploaded; skipping");
-    fs.rmSync(path.join(ctx.dir, "clips.json"), { force: true });
-    return;
-  }
+/**
+ * Normalizes one recording, measures its activity and has Claude describe it. Gameplay gets no auto-zoom: the whole
+ * screen moves all the time, so the camera would chase noise.
+ */
+async function analyzeOne(
+  input: string,
+  out: { video: string; activity: string; thumbnail: string },
+  game: string | undefined,
+  log: StepContext["log"],
+): Promise<AnalyzedClip> {
+  const name = path.basename(input);
+  log(`${name}: normalizing`);
+  await normalizeVideo(input, out.video);
+  const probe = await probeVideo(out.video);
 
-  const outDir = path.join(ctx.dir, "clips");
-  const framesDir = path.join(outDir, "frames");
-  const clips: ClipInfo[] = [];
-
-  for (const [i, name] of files.entries()) {
-    const id = `clip-${i + 1}`;
-    const input = path.join(ctx.dir, RAW_CLIPS_DIR, name);
-    const file = `clips/${id}.mp4`;
-    ctx.log(`${id}: normalizing ${name}`);
-    await normalizeVideo(input, path.join(ctx.dir, file));
-    const probe = await probeVideo(path.join(ctx.dir, file));
-
-    // Evenly spaced frames, at least MIN_FRAME_GAP_SEC apart, avoiding the very last frame.
-    const count = Math.max(1, Math.min(MAX_FRAMES, Math.floor(probe.durationSec / MIN_FRAME_GAP_SEC)));
-    const step = probe.durationSec / count;
-    fs.rmSync(framesDir, { recursive: true, force: true });
-    fs.mkdirSync(framesDir, { recursive: true });
+  // Evenly spaced frames, at least MIN_FRAME_GAP_SEC apart, avoiding the very last frame.
+  const count = Math.max(1, Math.min(MAX_FRAMES, Math.floor(probe.durationSec / MIN_FRAME_GAP_SEC)));
+  const step = probe.durationSec / count;
+  const framesDir = path.join(path.dirname(out.video), "frames");
+  fs.rmSync(framesDir, { recursive: true, force: true });
+  fs.mkdirSync(framesDir, { recursive: true });
+  try {
     const frames = [];
     for (let k = 0; k < count; k++) {
       const atSec = Math.min(k * step + step / 2, Math.max(0, probe.durationSec - 0.1));
-      const out = path.join(framesDir, `${k}.jpg`);
-      await extractFrame(path.join(ctx.dir, file), atSec, out);
-      frames.push({ atSec, file: out });
+      const file = path.join(framesDir, `${k}.jpg`);
+      await extractFrame(out.video, atSec, file);
+      frames.push({ atSec, file });
     }
-    const samples = await computeActivity(path.join(ctx.dir, file));
-    const activity = `clips/${id}.activity.json`;
-    fs.writeFileSync(path.join(ctx.dir, activity), JSON.stringify(samples));
-    const camera = cameraPath(samples);
-    const ticks = Math.max(1, Math.floor(probe.durationSec * 10));
-    const zoomed = Array.from({ length: ticks }, (_, k) => cameraAt(camera, k / 10).s).filter((z) => z > 1.15).length / ticks;
-    ctx.log(`${id}: activity analyzed, default auto zoom is zoomed in ${Math.round(zoomed * 100)}% of the time`);
+    if (!game) {
+      const samples = await computeActivity(out.video);
+      fs.writeFileSync(out.activity, JSON.stringify(samples));
+      const camera = cameraPath(samples);
+      const ticks = Math.max(1, Math.floor(probe.durationSec * 10));
+      const zoomed = Array.from({ length: ticks }, (_, k) => cameraAt(camera, k / 10).s).filter((z) => z > 1.15).length / ticks;
+      log(`${name}: activity analyzed, default auto zoom is zoomed in ${Math.round(zoomed * 100)}% of the time`);
+    }
+    await extractFrame(out.video, Math.min(1, probe.durationSec / 2), out.thumbnail, 480);
 
-    const thumbnail = `clips/${id}.jpg`;
-    await extractFrame(path.join(ctx.dir, file), Math.min(1, probe.durationSec / 2), path.join(ctx.dir, thumbnail), 480);
-
-    ctx.log(`${id}: describing ${count} frames (${probe.durationSec.toFixed(1)} s, ${probe.width}x${probe.height})`);
-    const { summary, timeline } = await describeClip(frames, probe.durationSec);
-    clips.push({
-      id,
-      original: name,
-      file,
-      thumbnail,
+    log(`${name}: describing ${count} frames (${probe.durationSec.toFixed(1)} s, ${probe.width}x${probe.height})`);
+    const { summary, timeline } = await describeClip(frames, probe.durationSec, game);
+    log(`${name}: ${summary}`);
+    return {
       durationSec: probe.durationSec,
       width: probe.width,
       height: probe.height,
       summary,
-      activity,
+      hasActivity: !game,
       timeline: timeline.map((t) => ({
         start: Math.max(0, Math.min(t.start, probe.durationSec)),
         end: Math.max(0, Math.min(t.end, probe.durationSec)),
         description: t.description,
       })),
-    });
-    ctx.log(`${id}: ${summary}`);
+    };
+  } finally {
+    fs.rmSync(framesDir, { recursive: true, force: true });
   }
-  fs.rmSync(framesDir, { recursive: true, force: true });
+}
+
+/** What the video covers, for picking library clips: the script once written, else the source notes. */
+function videoContext(dir: string): { topic: string; context: string } {
+  const read = <T>(f: string): T | null => {
+    try {
+      return JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")) as T;
+    } catch {
+      return null;
+    }
+  };
+  const script = read<Script>("script.json");
+  if (script) return { topic: script.title, context: [script.hook, ...script.segments.map((s) => `${s.heading}: ${s.text.slice(0, 300)}`)].join("\n") };
+  const article = read<Article>("article.json");
+  return { topic: article?.title ?? "", context: article?.text ?? "" };
+}
+
+/**
+ * The project's own uploads, or else the best clips from the channel's library. Either way each recording is
+ * analyzed once per channel (clipLibrary.ts) and linked into the project's clips/ folder for the render.
+ */
+export async function analyzeClips(ctx: StepContext): Promise<void> {
+  const game = getTemplate(ctx.project.niche).gameThumbnail?.label;
+  const kind = game ? `game:${game}` : "tutorial";
+  const analyze = (input: string, out: { video: string; activity: string; thumbnail: string }) => analyzeOne(input, out, game, ctx.log);
+
+  const own = listRawClips(ctx.dir);
+  let sources: CachedClip[] = [];
+  if (own.length) {
+    for (const name of own) sources.push(await cachedAnalysis(path.join(ctx.dir, RAW_CLIPS_DIR, name), kind, analyze));
+  } else {
+    const library = await indexClipLibrary(kind, analyze, ctx.log);
+    if (library.length) {
+      const { topic, context } = videoContext(ctx.dir);
+      sources = await selectClips({ topic, context, clips: library });
+      ctx.log(`Clip library: ${library.length} clip(s), using ${sources.length}`);
+    }
+  }
+  if (!sources.length) {
+    ctx.log("No clips uploaded and no clip library; skipping");
+    fs.rmSync(path.join(ctx.dir, "clips.json"), { force: true });
+    return;
+  }
+
+  fs.mkdirSync(path.join(ctx.dir, "clips"), { recursive: true });
+  const clips: ClipInfo[] = sources.map((c, i) => {
+    const id = `clip-${i + 1}`;
+    const file = `clips/${id}.mp4`;
+    const thumbnail = `clips/${id}.jpg`;
+    const activity = `clips/${id}.activity.json`;
+    linkFile(path.join(c.dir, "clip.mp4"), path.join(ctx.dir, file));
+    linkFile(path.join(c.dir, "thumb.jpg"), path.join(ctx.dir, thumbnail));
+    if (c.hasActivity) linkFile(path.join(c.dir, "activity.json"), path.join(ctx.dir, activity));
+    else fs.rmSync(path.join(ctx.dir, activity), { force: true });
+    return {
+      id,
+      original: c.original,
+      file,
+      thumbnail,
+      durationSec: c.durationSec,
+      width: c.width,
+      height: c.height,
+      summary: c.summary,
+      timeline: c.timeline,
+      ...(c.hasActivity ? { activity } : {}),
+    };
+  });
 
   writeJson(ctx, "clips.json", clips);
   ctx.log(`Analyzed ${clips.length} clip(s), ${clips.reduce((s, c) => s + c.durationSec, 0).toFixed(0)} s of footage`);
