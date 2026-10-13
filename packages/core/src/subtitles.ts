@@ -93,23 +93,30 @@ const BATCH = 60;
 
 /** Translates the sentences into `lang`, one output per input, in batches. */
 export async function translateSentences(sentences: string[], lang: string, topic: string): Promise<string[]> {
-  const name = LANGUAGE_NAMES[lang] ?? lang;
   const out: string[] = [];
-  for (let i = 0; i < sentences.length; i += BATCH) {
-    const batch = sentences.slice(i, i + BATCH);
-    const { items } = await generateStructured({
-      label: "subtitles",
-      model: TRANSLATE_MODEL,
-      maxTokens: 16000,
-      schema: z.object({ items: z.array(z.string()).describe("The translations, exactly one per input sentence, same order") }),
-      system: `You translate YouTube video subtitles from English into natural, spoken ${name}. Topic: ${topic}.
-Keep game terms players use untranslated when ${name} players use them in English (class, spec, talent and spell names, DPS, tank, healer, buff, nerf, raid, dungeon, beta). Keep numbers. Do not add or drop sentences.`,
-      prompt: `Translate these ${batch.length} sentences. Return exactly ${batch.length} items.\n\n${batch.map((s, k) => `${k + 1}. ${s}`).join("\n")}`,
-    });
-    if (items.length !== batch.length) throw new Error(`Subtitle translation returned ${items.length} lines for ${batch.length}.`);
-    out.push(...items.map((t) => t.replace(/^\d+\.\s*/, "").trim()));
-  }
+  for (let i = 0; i < sentences.length; i += BATCH) out.push(...(await translateBatch(sentences.slice(i, i + BATCH), lang, topic)));
   return out;
+}
+
+/**
+ * One batch, line for line. The model sometimes merges two sentences (59 lines for 60), which would shift every
+ * caption after it; then the batch is split in half and each half translated again, down to single sentences.
+ */
+async function translateBatch(batch: string[], lang: string, topic: string): Promise<string[]> {
+  const name = LANGUAGE_NAMES[lang] ?? lang;
+  const { items } = await generateStructured({
+    label: "subtitles",
+    model: TRANSLATE_MODEL,
+    maxTokens: 16000,
+    schema: z.object({ items: z.array(z.string()).describe("The translations, exactly one per input sentence, same order") }),
+    system: `You translate YouTube video subtitles from English into natural, spoken ${name}. Topic: ${topic}.
+Keep game terms players use untranslated when ${name} players use them in English (class, spec, talent and spell names, DPS, tank, healer, buff, nerf, raid, dungeon, beta). Keep numbers. Do not add or drop sentences.`,
+    prompt: `Translate these ${batch.length} sentences. Return exactly ${batch.length} items.\n\n${batch.map((s, k) => `${k + 1}. ${s}`).join("\n")}`,
+  });
+  if (items.length === batch.length) return items.map((t) => t.replace(/^\d+\.\s*/, "").trim());
+  if (batch.length === 1) throw new Error(`Subtitle translation returned ${items.length} lines for 1.`);
+  const half = Math.ceil(batch.length / 2);
+  return [...(await translateBatch(batch.slice(0, half), lang, topic)), ...(await translateBatch(batch.slice(half), lang, topic))];
 }
 
 /** Translates the title and description; timestamps, links, hashtags and names stay as they are. */
