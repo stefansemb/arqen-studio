@@ -22,7 +22,8 @@ export const DEFAULT_CHANNEL = "default";
 
 /** Where B-roll images come from, tried in order for each scene. */
 // The Art Institute of Chicago and the Library of Congress were tried and dropped: both block automated image downloads.
-export const IMAGE_SOURCES = ["wikimedia", "met", "cleveland", "openverse", "pexels", "pixabay"] as const;
+// "gamelib": the channel's own game screenshots (screenshots.ts), matched to the narration by Claude.
+export const IMAGE_SOURCES = ["gamelib", "wikimedia", "met", "cleveland", "openverse", "pexels", "pixabay"] as const;
 export type ImageSourceId = (typeof IMAGE_SOURCES)[number];
 
 export interface ChannelProfile {

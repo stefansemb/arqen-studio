@@ -13,6 +13,7 @@ const UA = "ArqenAIStudio/1.0 (https://stefansemb.github.io/arqen-ai-studio/)";
 const MIN_WIDTH = 900;
 
 export const SOURCE_NAMES: Record<ImageSourceId, string> = {
+  gamelib: "Own screenshots",
   wikimedia: "Wikimedia Commons",
   met: "The Metropolitan Museum of Art",
   cleveland: "Cleveland Museum of Art",
@@ -218,6 +219,8 @@ export function sourceKey(source: ImageSourceId): { env: string; value: string |
 /** Searches one source. Throws on network or API errors; returns [] when nothing usable matches. */
 export async function searchImages(source: ImageSourceId, query: string): Promise<StockImage[]> {
   switch (source) {
+    case "gamelib":
+      return []; // matched per video in the assets step, not searched
     case "wikimedia":
       return searchWikimedia(query);
     case "met":

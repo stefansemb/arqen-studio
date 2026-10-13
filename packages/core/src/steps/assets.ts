@@ -8,6 +8,7 @@ import { getChannel, type ImageSourceId } from "../channels";
 import type { Article, PlannedScene, Timings } from "../types";
 import { pickImages } from "../providers/imagePick";
 import { fileHash, recentImages } from "../recentImages";
+import { assignScreenshots, indexScreenshots, type Screenshot } from "../screenshots";
 
 const EXT: Record<string, string> = {
   "image/jpeg": ".jpg",
@@ -59,12 +60,15 @@ export async function fetchAssets(ctx: StepContext): Promise<void> {
 
   // The channel's image sources, minus those that need a key that isn't set.
   const sources: ImageSourceId[] = [];
+  // Own screenshots aren't searched per scene: they are matched to the whole video at once below.
+  const gamelib = getChannel().imageSources.includes("gamelib");
   for (const s of getChannel().imageSources) {
+    if (s === "gamelib") continue;
     const key = sourceKey(s);
     if (key && !key.value) ctx.log(`${key.env} not set: skipping ${SOURCE_NAMES[s]}`, "warn");
     else sources.push(s);
   }
-  if (!sources.length) ctx.log("No image source available: B-roll scenes fall back to a branded backdrop", "warn");
+  if (!sources.length && !gamelib) ctx.log("No image source available: B-roll scenes fall back to a branded backdrop", "warn");
   // Archive-first channels (history) only take stock photos of places the query names, never of people: a costumed
   // model for "Vlad III portrait" misleads. When nothing fits, the nearest archive image is shown again instead.
   const archiveFirst = sources.length > 0 && !STOCK_SOURCES.includes(sources[0]);
@@ -85,6 +89,31 @@ export async function fetchAssets(ctx: StepContext): Promise<void> {
   const assetsDir = path.join(ctx.dir, "assets");
   fs.rmSync(assetsDir, { recursive: true, force: true });
   fs.mkdirSync(assetsDir);
+
+  // Game channels: Claude matches the host's screenshots to the B-roll scenes' narration. Stock photos have no
+  // game footage, so unmatched B-roll scenes reuse a nearby screenshot instead of searching stock.
+  let shots: Screenshot[] = [];
+  const shotFor = new Map<number, Screenshot>();
+  if (gamelib) {
+    try {
+      shots = await indexScreenshots(ctx.log);
+      const broll = scenes.map((s, i) => ({ s, i })).filter(({ s }) => s.type === "broll");
+      const picks = await assignScreenshots({
+        topic: article.title,
+        scenes: broll.map(({ s }) => ({ narration: narrationFor(s), query: s.query })),
+        shots,
+      });
+      picks.forEach((p, k) => p >= 0 && shotFor.set(broll[k].i, shots[p]));
+      ctx.log(`Own screenshots: ${shots.length} usable, matched to ${shotFor.size}/${broll.length} B-roll scenes`);
+    } catch (err) {
+      ctx.log(`Own screenshots failed (${(err as Error).message}); using the other sources`, "warn");
+      shots = [];
+      shotFor.clear();
+    }
+  }
+  const useShots = shots.length > 0;
+  /** One resized copy per screenshot, shared by every scene that shows it. */
+  const shotAssets = new Map<string, string>();
 
   const used = new Set<string>();
   // Images the channel's latest videos already showed: preferred against, so viewers don't keep seeing the same stock shots.
@@ -125,6 +154,20 @@ export async function fetchAssets(ctx: StepContext): Promise<void> {
     const name = `scene-${String(i).padStart(3, "0")}`;
 
     try {
+      const shot = shotFor.get(i);
+      if (shot) {
+        let rel = shotAssets.get(shot.file);
+        if (!rel) {
+          rel = `assets/${name}.jpg`;
+          await resizeImage(shot.file, path.join(ctx.dir, rel));
+          shotAssets.set(shot.file, rel);
+        }
+        s.asset = rel;
+        s.source = SOURCE_NAMES.gamelib;
+        s.imageId = `gamelib:${path.basename(shot.file)}`;
+        perSource.set(SOURCE_NAMES.gamelib, (perSource.get(SOURCE_NAMES.gamelib) ?? 0) + 1);
+      }
+
       if (s.type === "article") {
         // Try remaining article images until one downloads.
         while (!s.asset && articleIdx < article.images.length) {
@@ -142,7 +185,8 @@ export async function fetchAssets(ctx: StepContext): Promise<void> {
 
       // First pass: only images the channel hasn't shown lately. Second pass (only if nothing new fits): any image.
       for (const fresh of [true, false]) {
-        if (!s.asset && s.query) {
+        // With own screenshots, B-roll and title backdrops come from them (reused below), never from stock.
+        if (!s.asset && s.query && !(useShots && (s.type === "broll" || s.type === "title"))) {
           // Archive-first: retry the archives with just the subject words ("Vlad") before giving up.
           const broad = specificWords(s.query).join(" ");
           const attempts: [ImageSourceId, string][] = sources.map((src) => [src, s.query!]);
@@ -207,7 +251,7 @@ export async function fetchAssets(ctx: StepContext): Promise<void> {
         }
       }
       if (!s.asset && s.query) {
-        if (archiveFirst && s.type === "broll") unfilled.push(i);
+        if (((archiveFirst || useShots) && s.type === "broll") || (useShots && s.type === "title")) unfilled.push(i);
         else ctx.log(`No usable image for "${s.query}"`, "warn");
       }
     } catch (err) {

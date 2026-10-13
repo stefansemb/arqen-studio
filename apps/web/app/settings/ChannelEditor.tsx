@@ -5,6 +5,7 @@ import type { ChannelProfile, ImageSourceId } from "@yta/core/channels";
 import type { TemplateInfo } from "../useChannels";
 
 const SOURCE_LABELS: Record<ImageSourceId, string> = {
+  gamelib: "Own screenshots (game channels: channel/screenshots and screenshot-folders.txt)",
   wikimedia: "Wikimedia Commons (paintings, maps, old photos)",
   met: "The Met Museum (public domain art)",
   cleveland: "Cleveland Museum of Art (CC0 art)",
