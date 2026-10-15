@@ -28,6 +28,8 @@ export interface GameThumbnailProps {
   label?: string;
   /** Up to 5 spell icon URLs shown in a row under the text. */
   icons?: string[];
+  /** Channel logo URL (transparent PNG), shown small in the top right corner. */
+  logo?: string;
   theme?: ThemeOverrides;
 }
 
@@ -71,6 +73,7 @@ export const GameThumbnail: React.FC<GameThumbnailProps> = ({
   lines,
   label,
   icons,
+  logo,
   theme: overrides,
 }) => {
   const t = resolveTheme(overrides);
@@ -151,6 +154,9 @@ export const GameThumbnail: React.FC<GameThumbnailProps> = ({
           ))}
         </div>
       ) : null}
+
+      {/* Top right, not bottom right: YouTube puts the duration badge there. */}
+      {logo ? <Img src={logo} style={{ position: "absolute", right: 30, top: 26, width: 260 }} /> : null}
 
       {/* Thin channel-gold frame, so the channel's thumbnails read as one set in a grid. */}
       <AbsoluteFill style={{ border: `6px solid ${t.accent}`, boxSizing: "border-box" }} />

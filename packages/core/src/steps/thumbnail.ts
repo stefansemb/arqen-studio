@@ -102,6 +102,10 @@ async function renderGameThumbnails(ctx: StepContext, label: string): Promise<vo
   try {
     const { port } = server.address() as AddressInfo;
     const serveUrl = await getBundle();
+    // Optional channel logo: channel/logo.png, copied in so the render server can reach it.
+    const logoFile = path.join(charactersDir(), "..", "logo.png");
+    const logo = fs.existsSync(logoFile) ? "thumbs/logo.png" : undefined;
+    if (logo) fs.copyFileSync(logoFile, path.join(ctx.dir, logo));
     const variants: ThumbnailVariant[] = [];
     for (let i = 0; i < VARIANTS; i++) {
       const text = publish.thumbnailTexts[i % publish.thumbnailTexts.length];
@@ -120,6 +124,7 @@ async function renderGameThumbnails(ctx: StepContext, label: string): Promise<vo
         ...(character.trimTop ? { trimTop: character.trimTop } : {}),
         lines: twoLines(text.text),
         label,
+        ...(logo ? { logo: `http://127.0.0.1:${port}/${logo}` } : {}),
         theme: getChannel().theme,
       };
       const file = `thumbs/thumb-${i}.jpg`;
