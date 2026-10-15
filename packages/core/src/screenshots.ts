@@ -144,6 +144,57 @@ export function withNameHints(s: Screenshot): Screenshot {
   return { ...s, classes: merge(s.classes, named(CLASSES)), races: merge(s.races, named(RACES)) };
 }
 
+/** Spec names that point at one class only; generic words like "Fire" or "Holy" are left out. */
+const SPECS: Record<string, string> = {
+  enhancement: "Shaman",
+  elemental: "Shaman",
+  affliction: "Warlock",
+  demonology: "Warlock",
+  feral: "Druid",
+  retribution: "Paladin",
+  marksmanship: "Hunter",
+  "beast mastery": "Hunter",
+  assassination: "Rogue",
+  subtlety: "Rogue",
+};
+
+/** The classes a piece of text names ("Rogues", "Enhancement"). Pure. */
+export function classesIn(text: string): Set<string> {
+  const t = ` ${text.toLowerCase().replace(/[^a-z]+/g, " ")} `;
+  const found = new Set<string>();
+  for (const c of CLASSES) if (t.includes(` ${c.toLowerCase()} `) || t.includes(` ${c.toLowerCase()}s `)) found.add(c);
+  for (const [spec, c] of Object.entries(SPECS)) if (t.includes(` ${spec} `)) found.add(c);
+  return found;
+}
+
+/**
+ * The class each scene is about, so B-roll in a class section shows that class. A scene naming one class starts
+ * its section; one naming several, or a title naming none, ends it. Other scenes inherit the current section,
+ * since B-roll narration often says "rage scales with armor" without naming the class. Pure.
+ */
+export function sceneClasses(scenes: { type: string; text?: string; narration: string }[]): (string | undefined)[] {
+  let current: string | undefined;
+  return scenes.map((s) => {
+    const named = classesIn(`${s.text ?? ""} ${s.narration}`);
+    if (named.size === 1) current = [...named][0];
+    else if (named.size > 1 || s.type === "title") current = undefined;
+    return current;
+  });
+}
+
+/** Kinds that show no particular character, so they suit any class section. */
+const NEUTRAL_KINDS = new Set(["landscape", "city", "dungeon"]);
+
+/**
+ * Whether a screenshot may be shown while a class is discussed: it shows that class, or no character at all.
+ * An untagged character shot is refused, since an orc with a shield reads as a Warrior whatever it is. Pure.
+ */
+export function fitsClass(shot: Pick<Screenshot, "classes" | "kind">, cls: string | undefined): boolean {
+  if (!cls) return true;
+  if (shot.classes.length) return shot.classes.some((c) => c.toLowerCase() === cls.toLowerCase());
+  return NEUTRAL_KINDS.has(shot.kind);
+}
+
 const AssignSchema = z.object({
   picks: z
     .array(z.object({ scene: z.number().int(), shot: z.number().int().describe("Screenshot number, or 0 when none fits") }))
@@ -171,14 +222,17 @@ export function spacePicks(picks: number[], gap = MIN_GAP): number[] {
  */
 export async function assignScreenshots(opts: {
   topic: string;
-  scenes: { narration: string; query?: string }[];
+  /** cls: the class the scene's section is about (sceneClasses); its picks must show that class or no character. */
+  scenes: { narration: string; query?: string; cls?: string }[];
   shots: Screenshot[];
 }): Promise<number[]> {
   if (!opts.scenes.length || !opts.shots.length) return opts.scenes.map(() => -1);
   const library = opts.shots
-    .map((s, i) => `${i + 1}. ${s.shows}${s.classes.length ? ` [class: ${s.classes.join(", ")}]` : ""}${s.races.length ? ` [race: ${s.races.join(", ")}]` : ""}${s.place ? ` [place: ${s.place}]` : ""}`)
+    .map((s, i) => `${i + 1}. ${s.shows}${s.classes.length ? ` [class: ${s.classes.join(", ")}]` : ""}${s.races.length ? ` [race: ${s.races.join(", ")}]` : ""}${s.place ? ` [place: ${s.place}]` : ""} [kind: ${s.kind}]`)
     .join("\n");
-  const scenes = opts.scenes.map((s, i) => `Scene ${i + 1}: "${s.narration}"${s.query ? ` (editor's idea: ${s.query})` : ""}`).join("\n");
+  const scenes = opts.scenes
+    .map((s, i) => `Scene ${i + 1}${s.cls ? ` [section: ${s.cls}]` : ""}: "${s.narration}"${s.query ? ` (editor's idea: ${s.query})` : ""}`)
+    .join("\n");
   const { picks } = await generateStructured({
     label: "screenshot-assign",
     model: SHOT_MODEL,
@@ -188,12 +242,16 @@ export async function assignScreenshots(opts: {
 For each scene, choose the screenshot that best shows what is being said: the class, race, place or kind of action.
 When the narration is about one class, a screenshot of that class beats everything else. Generic narration (beta news,
 leveling, launch) can use landscapes, cities or group shots. Vary the picks: do not use the same screenshot in
-scenes close together when another one fits. Use 0 only when nothing fits at all.`,
+scenes close together when another one fits. Use 0 only when nothing fits at all.
+A scene marked [section: X] is part of the section about class X: pick only a screenshot tagged [class: X], or a
+landscape, city or dungeon with no character. Never show a character of another class or an untagged character
+there; viewers spot a wrong class at once.`,
     prompt: `Video: ${opts.topic}\n\nScreenshots:\n${library}\n\nScenes:\n${scenes}\n\nPick one screenshot per scene.`,
   });
-  const raw = opts.scenes.map((_, i) => {
+  const raw = opts.scenes.map((s, i) => {
     const n = picks.find((p) => p.scene === i + 1)?.shot ?? 0;
-    return n >= 1 && n <= opts.shots.length ? n : 0;
+    // The prompt asks for the right class; this makes sure of it.
+    return n >= 1 && n <= opts.shots.length && fitsClass(opts.shots[n - 1], s.cls) ? n : 0;
   });
   return spacePicks(raw).map((n) => n - 1);
 }

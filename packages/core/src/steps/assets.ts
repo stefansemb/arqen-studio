@@ -8,7 +8,7 @@ import { getChannel, type ImageSourceId } from "../channels";
 import type { Article, PlannedScene, Timings } from "../types";
 import { pickImages } from "../providers/imagePick";
 import { fileHash, recentImages } from "../recentImages";
-import { assignScreenshots, indexScreenshots, type Screenshot } from "../screenshots";
+import { assignScreenshots, fitsClass, indexScreenshots, sceneClasses, type Screenshot } from "../screenshots";
 
 const EXT: Record<string, string> = {
   "image/jpeg": ".jpg",
@@ -94,13 +94,15 @@ export async function fetchAssets(ctx: StepContext): Promise<void> {
   // game footage, so unmatched B-roll scenes reuse a nearby screenshot instead of searching stock.
   let shots: Screenshot[] = [];
   const shotFor = new Map<number, Screenshot>();
+  /** The class each scene's section is about, so B-roll there never shows another class. */
+  const classOf = gamelib ? sceneClasses(scenes.map((s) => ({ type: s.type, text: s.text, narration: narrationFor(s) }))) : [];
   if (gamelib) {
     try {
       shots = await indexScreenshots(ctx.log);
       const broll = scenes.map((s, i) => ({ s, i })).filter(({ s }) => s.type === "broll");
       const picks = await assignScreenshots({
         topic: article.title,
-        scenes: broll.map(({ s }) => ({ narration: narrationFor(s), query: s.query })),
+        scenes: broll.map(({ s, i }) => ({ narration: narrationFor(s), query: s.query, cls: classOf[i] })),
         shots,
       });
       picks.forEach((p, k) => p >= 0 && shotFor.set(broll[k].i, shots[p]));
@@ -274,9 +276,11 @@ export async function fetchAssets(ctx: StepContext): Promise<void> {
   for (const x of scenes) if (x.asset) shows.set(x.asset, (shows.get(x.asset) ?? 0) + 1);
   for (const i of unfilled) {
     const s = scenes[i];
+    // In a class section, only reuse a screenshot that fits that class (shotFor knows what each scene shows).
+    const fits = (j: number) => !classOf[i] || (shotFor.has(j) && fitsClass(shotFor.get(j)!, classOf[i]));
     const own = scenes
       .map((x, j) => ({ x, d: Math.abs(j - i) }))
-      .filter(({ x, d }, j) => d > 0 && !unfilled.includes(j) && isArchive(x));
+      .filter(({ x, d }, j) => d > 0 && !unfilled.includes(j) && isArchive(x) && fits(j));
     const window = own.filter(({ d }) => d <= REUSE_WINDOW);
     const near = (window.length ? window : own).sort((a, b) => (shows.get(a.x.asset!) ?? 0) - (shows.get(b.x.asset!) ?? 0) || a.d - b.d)[0]?.x;
     if (near) {
