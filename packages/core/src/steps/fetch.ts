@@ -3,6 +3,7 @@ import { Readability } from "@mozilla/readability";
 import { updateProject } from "../db";
 import { readJson, writeJson, type StepContext } from "../context";
 import type { Article } from "../types";
+import { discourseRawUrl, markdownToText, parseDiscourseTopic, pickDiscoursePost, slugTitle, type DiscourseTopic } from "../discourse";
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36";
@@ -62,6 +63,8 @@ async function fetchRoundup(ctx: StepContext): Promise<void> {
 
 /** Downloads a page and extracts the readable article text and its images. */
 export async function fetchArticleFrom(url: string): Promise<Article> {
+  const topic = parseDiscourseTopic(url);
+  if (topic) return fetchDiscourseTopic(url, topic);
   const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "text/html" }, redirect: "follow" });
   if (!res.ok) throw new Error(`Fetching article failed: HTTP ${res.status}`);
   const html = await res.text();
@@ -99,5 +102,32 @@ export async function fetchArticleFrom(url: string): Promise<Article> {
     byline: parsed.byline ?? null,
     text: parsed.textContent.replace(/\n{3,}/g, "\n\n").trim(),
     images: images.slice(0, 8),
+  };
+}
+
+/** Discourse threads are JS-rendered; the raw endpoint gives markdown. Uses one post: the linked one, else the creator's latest. */
+async function fetchDiscourseTopic(url: string, topic: DiscourseTopic): Promise<Article> {
+  const res = await fetch(discourseRawUrl(topic), { headers: { "User-Agent": UA }, redirect: "follow" });
+  if (!res.ok) throw new Error(`Fetching forum topic failed: HTTP ${res.status}`);
+  const post = pickDiscoursePost(await res.text(), topic.post);
+  const text = post ? markdownToText(post.body) : "";
+  if (!post || !text) throw new Error("Forum topic has no readable post.");
+
+  // Real title from the topic JSON; the slug is a fine fallback.
+  let title = slugTitle(topic.slug);
+  try {
+    const j = await fetch(`${topic.base}/t/${topic.id}.json`, { headers: { "User-Agent": UA, Accept: "application/json" } });
+    if (j.ok) title = ((await j.json()) as { title?: string }).title || title;
+  } catch {
+    // keep slug title
+  }
+
+  return {
+    url,
+    title,
+    siteName: new URL(url).hostname.replace(/^www\./, ""),
+    byline: post.author,
+    text,
+    images: [],
   };
 }
