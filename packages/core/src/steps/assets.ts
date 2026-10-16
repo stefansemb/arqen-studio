@@ -26,6 +26,10 @@ const MAX_FAILURES = 3;
 const PICK_CANDIDATES = 5;
 /** How many scenes away an image may be borrowed from when a scene has none of its own. */
 const REUSE_WINDOW = 6;
+/** Game channels: scenes Claude matches to own screenshots by their narration. */
+const MATCHED_TYPES = new Set<string>(["broll", "stat", "quote"]);
+/** Game channels: scenes whose backdrop is always an own screenshot (matched or reused), never stock. */
+const SHOT_BACKDROP_TYPES = new Set<string>([...MATCHED_TYPES, "title"]);
 
 /** Downloads an image into assets/, returning its path relative to the project dir. */
 export async function download(url: string, dir: string, name: string): Promise<string | null> {
@@ -64,6 +68,11 @@ export async function fetchAssets(ctx: StepContext): Promise<void> {
   const gamelib = getChannel().imageSources.includes("gamelib");
   for (const s of getChannel().imageSources) {
     if (s === "gamelib") continue;
+    // Stock has no game footage: a "rogue aiming crossbow" photo behind a Warlock stat misleads.
+    if (gamelib && STOCK_SOURCES.includes(s)) {
+      ctx.log(`Game channel: skipping ${SOURCE_NAMES[s]}, cards and B-roll use own screenshots`);
+      continue;
+    }
     const key = sourceKey(s);
     if (key && !key.value) ctx.log(`${key.env} not set: skipping ${SOURCE_NAMES[s]}`, "warn");
     else sources.push(s);
@@ -99,14 +108,14 @@ export async function fetchAssets(ctx: StepContext): Promise<void> {
   if (gamelib) {
     try {
       shots = await indexScreenshots(ctx.log);
-      const broll = scenes.map((s, i) => ({ s, i })).filter(({ s }) => s.type === "broll");
+      const broll = scenes.map((s, i) => ({ s, i })).filter(({ s }) => MATCHED_TYPES.has(s.type));
       const picks = await assignScreenshots({
         topic: article.title,
         scenes: broll.map(({ s, i }) => ({ narration: narrationFor(s), query: s.query, cls: classOf[i] })),
         shots,
       });
       picks.forEach((p, k) => p >= 0 && shotFor.set(broll[k].i, shots[p]));
-      ctx.log(`Own screenshots: ${shots.length} usable, matched to ${shotFor.size}/${broll.length} B-roll scenes`);
+      ctx.log(`Own screenshots: ${shots.length} usable, matched to ${shotFor.size}/${broll.length} B-roll, stat and quote scenes`);
     } catch (err) {
       ctx.log(`Own screenshots failed (${(err as Error).message}); using the other sources`, "warn");
       shots = [];
@@ -187,8 +196,8 @@ export async function fetchAssets(ctx: StepContext): Promise<void> {
 
       // First pass: only images the channel hasn't shown lately. Second pass (only if nothing new fits): any image.
       for (const fresh of [true, false]) {
-        // With own screenshots, B-roll and title backdrops come from them (reused below), never from stock.
-        if (!s.asset && s.query && !(useShots && (s.type === "broll" || s.type === "title"))) {
+        // With own screenshots, B-roll and card backdrops come from them (reused below), never from stock.
+        if (!s.asset && s.query && !(useShots && SHOT_BACKDROP_TYPES.has(s.type))) {
           // Archive-first: retry the archives with just the subject words ("Vlad") before giving up.
           const broad = specificWords(s.query).join(" ");
           const attempts: [ImageSourceId, string][] = sources.map((src) => [src, s.query!]);
@@ -253,7 +262,7 @@ export async function fetchAssets(ctx: StepContext): Promise<void> {
         }
       }
       if (!s.asset && s.query) {
-        if (((archiveFirst || useShots) && s.type === "broll") || (useShots && s.type === "title")) unfilled.push(i);
+        if (((archiveFirst || useShots) && s.type === "broll") || (useShots && SHOT_BACKDROP_TYPES.has(s.type))) unfilled.push(i);
         else ctx.log(`No usable image for "${s.query}"`, "warn");
       }
     } catch (err) {
@@ -289,8 +298,11 @@ export async function fetchAssets(ctx: StepContext): Promise<void> {
       found++;
     } else {
       ctx.log(`No usable image for "${s.query}"`, "warn");
-      s.type = "title";
-      s.text ||= s.query ?? "";
+      // Stat and quote cards stay what they are, on the plain backdrop.
+      if (s.type === "broll" || s.type === "title") {
+        s.type = "title";
+        s.text ||= s.query ?? "";
+      }
     }
   }
   const reused = unfilled.filter((i) => scenes[i].asset).length;

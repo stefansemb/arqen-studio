@@ -9,6 +9,7 @@ import { cameraAt } from "@yta/video/camera";
 import { ACTIVITY_SAMPLING, cameraPath, diffFrames, type ActivitySample } from "../zoom";
 import type { Article, ClipInfo, Script } from "../types";
 import { getTemplate } from "../templates";
+import { channelDataDir } from "../channels";
 import { cachedAnalysis, indexClipLibrary, linkFile, selectClips, type AnalyzedClip, type CachedClip } from "../clipLibrary";
 
 import { RAW_CLIPS_DIR, VIDEO_EXTENSIONS } from "../paths";
@@ -36,8 +37,61 @@ export function listRawClips(dir: string): string[] {
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
 
+export interface CharacterName {
+  name: string;
+  /** Race and class, e.g. "Orc Warlock". */
+  who: string;
+}
+
+/** Lines of channel/character-names.txt ("Ste Lock = Orc Warlock"); comments and lines without "=" are skipped. Pure. */
+export function parseCharacterNames(text: string): CharacterName[] {
+  return text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("#") && l.includes("="))
+    .map((l) => {
+      const at = l.indexOf("=");
+      return { name: l.slice(0, at).trim(), who: l.slice(at + 1).trim() };
+    })
+    .filter((c) => c.name && c.who);
+}
+
+/** The current channel's known character names, so the clip log can tell which class is played. */
+function characterNames(): CharacterName[] {
+  try {
+    return parseCharacterNames(fs.readFileSync(path.join(channelDataDir(), "channel", "character-names.txt"), "utf8"));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The gameplay logging prompt. Claude read a Warlock with a Voidwalker as a Hunter from the look of the character,
+ * so it reads the HUD first and names the class only when something on screen shows it. Pure.
+ */
+export function gameplayPrompt(durationSec: number, game: string, names: CharacterName[]): string {
+  const d = durationSec.toFixed(1);
+  const known = names.length
+    ? `\nKnown characters on this channel (match the name in the player frame):\n${names.map((c) => `- "${c.name}" is ${c.who}`).join("\n")}\n`
+    : "";
+  return `These frames come from a ${d}-second gameplay recording of ${game} (World of Warcraft).
+Before describing anything, read the HUD in the frames:
+1. The player frame (top left): the character's name and level.
+2. The pet frame below it: the pet's name and what it is. Imp, Voidwalker, Succubus and Felhunter are Warlock demons; a
+beast (wolf, cat, boar, bird) is a Hunter pet.
+3. The cast bar and spell names on screen: Shadow Bolt, Corruption, Drain Life or Life Tap mean Warlock; Frostbolt or
+Fireball mean Mage; Lightning Bolt or totems mean Shaman; Aimed Shot or Auto Shot mean Hunter.
+${known}
+Name the player's class only when the player frame, a known character name, a class pet or a class spell shows it;
+otherwise write "unknown class". Never guess the class from the race, weapon, armor or a ranged attack.
+Describe what the recording shows as a timeline covering 0 to ${d} s, split where the action meaningfully changes.
+For each part name the player character's class (or "unknown class") and race when visible, the zone or place, and what
+happens (fighting which enemy, casting which spell, travelling, in a group, in a city or dungeon), so an editor can match
+each part to narration. Start the summary with the character's name and class as read from the HUD.`;
+}
+
 /** `game`: the game's name for gameplay recordings; otherwise a software tutorial screen recording. */
-async function describeClip(frames: { atSec: number; file: string }[], durationSec: number, game?: string) {
+export async function describeClip(frames: { atSec: number; file: string }[], durationSec: number, game?: string, names: CharacterName[] = []) {
   const content: Anthropic.ContentBlockParam[] = [];
   for (const f of frames) {
     content.push({ type: "text", text: `Frame at ${f.atSec.toFixed(1)} s:` });
@@ -50,11 +104,7 @@ async function describeClip(frames: { atSec: number; file: string }[], durationS
   content.push({
     type: "text",
     text: game
-      ? `These frames come from a ${d}-second gameplay recording of ${game} (World of Warcraft).
-Describe what the recording shows as a timeline covering 0 to ${d} s, split where the action meaningfully changes.
-For each part name the player character's class and race when visible, the zone or place, and what happens (fighting
-which enemy, casting which kind of spell, travelling, in a group, in a city or dungeon), so an editor can match each
-part to narration.`
+      ? gameplayPrompt(durationSec, game, names)
       : `These frames come from a ${d}-second silent screen recording made for a software tutorial.
 Describe what the recording shows as a timeline covering 0 to ${d} s, split where the screen meaningfully changes
 (new page, dialog, typed input, button click, result appearing). Name visible UI elements and text so an editor can match
@@ -125,7 +175,7 @@ async function analyzeOne(
     await extractFrame(out.video, Math.min(1, probe.durationSec / 2), out.thumbnail, 480);
 
     log(`${name}: describing ${count} frames (${probe.durationSec.toFixed(1)} s, ${probe.width}x${probe.height})`);
-    const { summary, timeline } = await describeClip(frames, probe.durationSec, game);
+    const { summary, timeline } = await describeClip(frames, probe.durationSec, game, game ? characterNames() : []);
     log(`${name}: ${summary}`);
     return {
       durationSec: probe.durationSec,
