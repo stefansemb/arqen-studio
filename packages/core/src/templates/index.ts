@@ -137,7 +137,8 @@ export const wowPatch: NicheTemplate = {
   gameThumbnail: { label: "WoW Forever" },
   wordsPerMinute: 155,
   categoryId: "20",
-  cta: "If this helped, subscribe so you catch every patch the day it drops, and tell me in the comments how this change hits your class.",
+  // Until launch, the CTA sells the leveling series that starts on launch day (2026-11-04); update it once the series is live.
+  cta: "I'm leveling from day one when WoW Forever launches on November 4th, and it's going to be a series, so subscribe if you want to level along with me. And tell me in the comments how this change hits your class.",
   scriptSystem: `You write narration scripts for a YouTube channel about World of Warcraft: Forever (Blizzard's Classic+ version, currently in beta).
 The host plays the beta himself. Videos break down patch notes, class buffs and nerfs, new content and what it means for players.
 Audience: WoW players (Classic and retail veterans) who want to know what changed, whether it hurts or helps their class, and what to do now.
@@ -179,7 +180,8 @@ export const wowGuide: NicheTemplate = {
   // A touch slower than news: viewers follow along and pause.
   wordsPerMinute: 145,
   categoryId: "20",
-  cta: "If this guide helped, save it for launch day, subscribe for more WoW Forever guides, and tell me in the comments which class you're maining at launch and why. If you've played the beta, share what surprised you.",
+  // Until launch, the CTA sells the leveling series that starts on launch day (2026-11-04); update it once the series is live.
+  cta: "If this guide helped, save it for launch day. I'm leveling from day one when WoW Forever launches on November 4th, and it's going to be a series, so subscribe if you want to level along with me. And tell me in the comments which class you're maining at launch and why. If you've played the beta, share what surprised you.",
   scriptSystem: `You write narration scripts for in-depth guide videos on a YouTube channel about World of Warcraft: Forever (Blizzard's Classic+ version).
 The host has played the beta on several characters and classes. Formats: class tier lists (DPS, healer, tank, leveling), class and spec guides
 (leveling 1-60, talents, rotation, gear, professions), "which class should you play" deep dives, and system guides (pets, dungeons, PvP).
